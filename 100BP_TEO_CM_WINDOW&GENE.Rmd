@@ -1,0 +1,285 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+
+library(data.table)
+library(tidyverse)
+library(cowplot)
+
+
+```
+
+
+
+
+```{r}
+allpops_Chrom1<-fread("~/Desktop/All_pop_1Kb_filt.csv") %>% select(CHROM,BIN_START,BIN_END,PI,NBR_BP,pop,N_VARIANTS) %>% filter(CHROM==1)
+```
+
+
+
+
+
+
+
+
+get genetic map from Ogut 2015 for chromosome1; correct so minimum is 0
+```{r}
+gen_map<-fread("~/Desktop/ogut_fifthcM_map_agpv4_INCLUDE.txt") %>%
+   rename(name=V1, marker=V2, chrom=V4, pos=V5, cm=V3) %>% 
+  filter(chrom==1) %>% mutate(cm=cm+abs(min(cm)))
+```
+
+Get positon of Genes, RNA, EXONS,CDS five_prime_UTR from Zea_mays.B73_RefGen_v4.44.chromosome.1.gff3
+```{r}
+read.delim("~/Downloads/Zea_mays.B73_RefGen_v4.44.chromosome.1.gff3", header=F, comment.char="#") -> gff
+ 
+```
+
+View Data
+```{r}
+read.delim("~/Downloads/Zea_mays.B73_RefGen_v4.44.chromosome.1.gff3", header=F, comment.char="#")
+```
+Filtering data so we only get data for genes, removing columns
+```{r}
+Gene_position<-filter(gff, V3=="gene")  %>%
+  select(-V8, -V6, -V9)  
+
+```
+
+
+
+
+
+let’s get cm positions for genes in each pop; remove genes with NA (usually because before start of genetic map)
+```{r}
+teo_palmarCM_gene1<-mutate(Gene_position,cm_start=approx(x=gen_map$pos,y=gen_map$cm,xout=Gene_position$V4)$y) %>%
+  mutate(cm_end=approx(x=gen_map$pos,y=gen_map$cm,xout=Gene_position$V5)$y) %>%
+  mutate(rec=cm_end-cm_start) %>% filter(rec!="NA")
+```
+
+Cleaning up data, removing columns, renaming certain columns so they can be read by bedtools, convernting CM to integers by multiplying 1000000000 and removing decimal places
+```{r}
+TEO_CM_GENE<-teo_palmarCM_gene1 %>% select(-V2,-V3,-V4,-V5,-V7,-rec) %>% mutate(cm_start=cm_start*1000000000, cm_end=cm_end*1000000000) %>% mutate (cm_start=round(cm_start, digits=0), cm_end=round(cm_end, digits=0)) %>% rename(chrom=V1, chromStart=cm_start, chromEnd=cm_end) 
+
+TEO_CM_GENE$chrom<-"chr1" 
+
+```
+
+```{r}
+winsize=100 #winsize
+PC_Sites_PI<-fread("~/Downloads/PC.sites.pi")
+options(scipen = 999)  
+```
+
+```{r}
+CountPC_Sites_PI<-fread("~/Downloads/PC.sites.pi")
+ CountPC_Sites_PI<-mutate(CountPC_Sites_PI,Window_Start=floor(POS/winsize)*winsize) %>% 
+  group_by(Window_Start) %>% 
+  count(Window_Start) 
+```
+
+```{r}
+
+PC_Sites_PI_100bp<-mutate(PC_Sites_PI,Window_Start=floor(POS/winsize)*winsize) %>% 
+  group_by(Window_Start) %>% 
+  summarize(pi=mean(PI)) 
+
+PC_Sites_PI_100bp<-mutate(PC_Sites_PI_100bp,Window_Stop=Window_Start+100,NBR_BP=CountPC_Sites_PI$n)
+PC_Sites_PI_100bp<-PC_Sites_PI_100bp[c("Window_Start", "Window_Stop", "pi", "NBR_BP")]
+```
+
+```{r}
+FiltPC_Sites_PI_100bp<-filter(PC_Sites_PI_100bp, NBR_BP>50)
+
+```
+
+Get Window positions from any Teosinte population
+```{r}
+teo_palmar_Chrom1<-FiltPC_Sites_PI_100bp
+```
+
+let’s get cm positions for windows in each pop; remove windows with NA (usually because before start of genetic map)
+```{r}
+teo_palmar_Chrom1<-mutate(teo_palmar_Chrom1,cm_start=approx(x=gen_map$pos,y=gen_map$cm,xout=teo_palmar_Chrom1$Window_Start)$y) %>%
+  mutate(cm_end=approx(x=gen_map$pos,y=gen_map$cm,xout=teo_palmar_Chrom1$Window_Stop)$y) %>%
+  mutate(rec=cm_end-cm_start) %>% filter(rec!="NA")
+
+```
+
+
+
+Cleaning up data, removing columns, renaming certain columns so they can be read by bedtools, convernting CM to integers by multiplying 1000000000 and removing decimal places
+```{r}
+TEO_CM_WINDOW<-teo_palmar_Chrom1 %>% select( -Window_Stop, -pi, -NBR_BP, -rec) %>% mutate(cm_start=cm_start*1000000000, cm_end=cm_end*1000000000) %>% mutate (cm_start=round(cm_start, digits=0), cm_end=round(cm_end, digits=0)) %>% rename(chrom=Window_Start, chromStart=cm_start, chromEnd=cm_end) 
+
+TEO_CM_WINDOW$chrom<-"chr1" 
+```
+
+
+
+```{r}
+view(TEO_CM_WINDOW)
+```
+No e in my textfiles...Eliminating scientific notation
+```{r}
+options(scipen = 999)
+
+```
+
+Make Textfiles
+```{r}
+#write.table(TEO_CM_GENE, file="100BPTEO_CM_GENE.txt",row.names=F,quote=F,sep="\t")
+```
+
+```{r}
+#write.table(TEO_CM_WINDOW, file="100BPTEO_CM_WINDOW.txt",row.names=F,quote=F,sep="\t")
+```
+
+
+```{r}
+read.delim("~/100BPDistance_Between_Window_and_Gene_CM.txt", header=F, comment.char="#")-> Distance_Between_100BPWindow_and_Gene_CM.txt  
+```
+
+
+
+```{r}
+Distance_Between_100BPWindow_and_Gene_CM.txt<-Distance_Between_100BPWindow_and_Gene_CM.txt %>% rename(chromWindow=V1, WindowCM_Start=V2, WindowCM_End=V3, chromGene=V4, GeneCM_Start=V5, GeneCM_End=V6, Distance=V7 )
+```
+
+```{r}
+Distance_Between_100BPWindow_and_Gene_CM.txt<-Distance_Between_100BPWindow_and_Gene_CM.txt %>% mutate(WindowCM_Start=WindowCM_Start/1000000000,WindowCM_End=WindowCM_End/1000000000,GeneCM_Start=GeneCM_Start/1000000000,GeneCM_End=GeneCM_End/1000000000, Distance=Distance/1000000000 ) 
+
+```
+
+
+
+
+```{r}
+Distance_Between_100BPWindow_and_Gene_CM.txt$PI<-teo_palmar_Chrom1$pi
+```
+
+```{r}
+Distance_Between_100BPWindow_and_Gene_CM.txt<-drop_na(Distance_Between_100BPWindow_and_Gene_CM.txt)
+```
+
+```{r}
+FiltDistance_Between_100BPWindow_and_Gene_CM.txt<-filter(Distance_Between_100BPWindow_and_Gene_CM.txt,Distance<.1)
+```
+
+
+
+
+```{r}
+smoothpi<-smooth.spline(y=Distance_Between_100BPWindow_and_Gene_CM.txt$PI,x=Distance_Between_100BPWindow_and_Gene_CM.txt$Distance)
+```
+
+```{r}
+plot(smoothpi,col="blue",lwd=1,type="l",xlab="Distance from Gene",ylab=expression(pi),cex.lab=2,cex.axis=1.5)
+```
+```{r}
+FilteredDistance_Between_100BPWindow_and_Gene_CM.txt<-filter(Distance_Between_100BPWindow_and_Gene_CM.txt,Distance<.01)
+smoothpi<-smooth.spline(y=FilteredDistance_Between_100BPWindow_and_Gene_CM.txt$PI,x=FilteredDistance_Between_100BPWindow_and_Gene_CM.txt$Distance) 
+plot(smoothpi,col="blue",lwd=1,type="l",xlab="Distance from Gene",ylab=expression(pi),cex.lab=2,cex.axis=1.5)
+```
+
+
+```{r}
+#pdf('Scatterplot_Distance_Between_100BPWindow_and_Gene_CM.txt.pdf')
+ggplot(Distance_Between_100BPWindow_and_Gene_CM.txt,aes(x=Distance,y=PI)) +
+  geom_point(color="black",alpha=.1) + 
+  geom_smooth() + geom_smooth(method="lm", color="red") + 
+  xlim(.000000, .01) +
+  scale_x_log10(name="Log Distance from Gene") 
+ #dev.off()
+```
+
+
+```{r}
+sp 
+```
+
+
+```{r}
+ #pdf('Scatterplot_FiltDistance_Between_100BPWindow_and_Gene_CM.txt.pdf')
+ggplot(FiltDistance_Between_100BPWindow_and_Gene_CM.txt,aes(x=Distance,y=PI))+
+  geom_point(color="black",alpha=.1) + geom_smooth()
+ #dev.off()
+```
+
+
+
+
+```{r}
+ggplot(Distance_Between_100BPWindow_and_Gene_CM.txt,aes(x=log(Distance),y=PI))+
+  geom_point(color="black",alpha=.1) + geom_smooth(method=lm, se=FALSE) + xlim(-15, .01) 
+```
+
+
+```{r}
+read.delim("~/UpstreamDistance_Between_100BPWindow_and_Gene_CM.txt", header=F, comment.char="#")-> UpstreamDistance_Between_100BPWindow_and_Gene_CM.txt  
+read.delim("~/DownstreamDistance_Between_100BPWindow_and_Gene_CM.txt", header=F, comment.char="#")-> DownstreamDistance_Between_100BPWindow_and_Gene_CM.txt
+```
+
+```{r}
+UpstreamDistance_Between_100BPWindow_and_Gene_CM.txt<-UpstreamDistance_Between_100BPWindow_and_Gene_CM.txt %>% rename(chromWindow=V1, WindowCM_Start=V2, WindowCM_End=V3, chromGene=V4, GeneCM_Start=V5, GeneCM_End=V6, Distance=V7 )
+DownstreamDistance_Between_100BPWindow_and_Gene_CM.txt<-DownstreamDistance_Between_100BPWindow_and_Gene_CM.txt %>% rename(chromWindow=V1, WindowCM_Start=V2, WindowCM_End=V3, chromGene=V4, GeneCM_Start=V5, GeneCM_End=V6, Distance=V7 )
+```
+
+```{r}
+UpstreamDistance_Between_100BPWindow_and_Gene_CM.txt<-UpstreamDistance_Between_100BPWindow_and_Gene_CM.txt %>% mutate(WindowCM_Start=WindowCM_Start/1000000000,WindowCM_End=WindowCM_End/1000000000,GeneCM_Start=GeneCM_Start/1000000000,GeneCM_End=GeneCM_End/1000000000, Distance=Distance/1000000000 ) 
+DownstreamDistance_Between_100BPWindow_and_Gene_CM.txt<-DownstreamDistance_Between_100BPWindow_and_Gene_CM.txt %>% mutate(WindowCM_Start=WindowCM_Start/1000000000,WindowCM_End=WindowCM_End/1000000000,GeneCM_Start=GeneCM_Start/1000000000,GeneCM_End=GeneCM_End/1000000000, Distance=Distance/1000000000 )
+```
+
+```{r}
+GeneDensityDistance<-UpstreamDistance_Between_100BPWindow_and_Gene_CM.txt
+```
+
+```{r}
+GeneDensityDistance$gene_density<-2/((abs(UpstreamDistance_Between_100BPWindow_and_Gene_CM.txt$Distance)+DownstreamDistance_Between_100BPWindow_and_Gene_CM.txt$Distance)) 
+GeneDensityDistance$PI<-teo_palmar_Chrom1$pi
+```
+
+```{r}
+GeneDensityDistance<-filter(GeneDensityDistance,gene_density<5000)
+```
+
+```{r}
+ggplot(GeneDensityDistance,aes(x=gene_density,y=PI)) +
+  geom_point(color="black",alpha=.1) + 
+  geom_smooth() + geom_smooth(method="lm", color="red")  
+  
+
+  
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

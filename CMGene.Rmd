@@ -1,0 +1,109 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+
+library(data.table)
+library(tidyverse)
+library(cowplot)
+```
+
+
+
+```{r}
+allpops<-fread("~/Desktop/All_pop_1Kb_filt.csv") %>% select(CHROM,BIN_START,BIN_END,PI,NBR_BP,pop,N_VARIANTS) %>% filter(CHROM==1)
+```
+
+get genetic map from Ogut 2015 for chromosome1; correct so minimum is 0
+```{r}
+gen_map<-fread("~/Desktop/ogut_fifthcM_map_agpv4_INCLUDE.txt") %>%
+   rename(name=V1, marker=V2, chrom=V4, pos=V5, cm=V3) %>% 
+  filter(chrom==1) %>% mutate(cm=cm+abs(min(cm)))
+```
+
+
+```{r}
+read.delim("~/Downloads/Zea_mays.B73_RefGen_v4.44.chromosome.1.gff3", header=F, comment.char="#") -> gff
+ 
+```
+
+
+```{r}
+read.delim("~/Downloads/Zea_mays.B73_RefGen_v4.44.chromosome.1.gff3", header=F, comment.char="#")
+```
+Filtering data so we only get data for genes, removing columns
+```{r}
+Gene_position<-filter(gff, V3=="gene")  %>%
+  select(-V8, -V6, -V9)  
+
+```
+
+
+
+
+
+let’s get cm positions for genes in each pop; remove genes with NA (usually because before start of genetic map)
+```{r}
+teo_palmarCM_gene1<-mutate(Gene_position,cm_start=approx(x=gen_map$pos,y=gen_map$cm,xout=Gene_position$V4)$y) %>%
+  mutate(cm_end=approx(x=gen_map$pos,y=gen_map$cm,xout=Gene_position$V5)$y) %>%
+  mutate(rec=cm_end-cm_start) %>% filter(rec!="NA")
+```
+
+```{r}
+TEO_PALMARCM_GENE<-teo_palmarCM_gene1 %>% select(-V2,-V3,-V4,-V5,-V7,-rec) %>% mutate(cm_start=cm_start*10000000, cm_end=cm_end*10000000) %>% mutate (cm_start=round(cm_start, digits=5), cm_end=round(cm_end, digits=5))
+
+```
+
+```{r}
+
+
+
+
+
+view(TEO_PALMARCM_GENE)
+```
+
+
+
+
+
+```{r}
+teo_palmar_Chrom1<-filter(allpops_Chrom1,pop=="Teo_Palmar_Chico")
+```
+
+```{r}
+teo_palmar_Chrom1<-mutate(teo_palmar_Chrom1,cm_start=approx(x=gen_map$pos,y=gen_map$cm,xout=teo_palmar_Chrom1$BIN_START)$y) %>%
+  mutate(cm_end=approx(x=gen_map$pos,y=gen_map$cm,xout=teo_palmar_Chrom1$BIN_END)$y) %>%
+  mutate(rec=cm_end-cm_start) %>% filter(rec!="NA")
+
+```
+
+
+```{r}
+teo_palmar_Chrom1 %>% select(-BIN_START, -BIN_END, -PI, -NBR_BP, -pop, -N_VARIANTS, -rec) %>% mutate(cm_start=cm_start*10000000, cm_end=cm_end*10000000) %>% mutate (cm_start=round(cm_start, digits=5), cm_end=round(cm_end, digits=5))
+```
+
+```{r}
+write.table(TEO_PALMARCM_GENE, file="TEO_PALMARCM_GENE.txt",row.names=F,quote=F,sep="\t")
+```
+
+```{r}
+write.table(teo_palmar_Chrom1, file="teo_palmar_Chrom1.txt",row.names=F,quote=F,sep="\t")
+```
+
+
+
+
+
+
+
+
+
+
+

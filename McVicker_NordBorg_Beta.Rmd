@@ -1,0 +1,206 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+library(data.table)
+library(tidyverse)
+library(cowplot)
+library(TruncatedDistributions)
+options(scipen = 999)
+```
+
+### Variables
+$\gamma$ DFE, window sizes, etc.
+```{r}
+pi_winsize=100000 #calculate pi in this window
+beta_winsize=500000 #calculate beta using 0fold sites in this window
+minsites=30 #minimum sites to calculate pi in a window
+mu=1E-7 #mutation rate per bp
+
+#dfe<-c( 0.00001538123, 0.00004238653, 0.00008319471, 0.00013599086, 0.00020084897, 0.00029116950, 0.00041191076, 0.00058272152, 0.00090246186, 0.00541460267) #bad estimate from gama_bobama.Rmd and Silas's polyDFE runs
+
+p_dfe=rep(0.1,10) #each value above is of decile, so prob. of each value is 0.1
+
+dir="~/Background_Selection/"
+```
+
+### Data Files
+
+Get genetic map from Ogut 2015 for chromosome1; correct so minimum cM on chromosome is 0 *Genetic Map 1*
+```{r}
+
+map=paste(dir,"ogut_fifthcM_map_agpv4_INCLUDE.txt",sep="")  #genetic map
+gen_map<-fread(map) %>%
+  rename(name=V1, marker=V2, chrom=V4, pos=V5, cm=V3) %>% 
+  filter(chrom==1) %>% mutate(cm=cm+abs(min(cm)))
+summary(gen_map)
+head(gen_map)
+ggplot(data=gen_map,aes(x=pos,y=cm))+geom_point(alpha=.9,col="blue")+ xlab('BP Position') +ylab('Centimorgans')+ggtitle('BP vs CM Chromosome 1')
+```
+
+Get new genetic map for chromosome 1 bp_pos, cm/Mb, and cM *Genetic Map 2*
+```{r}
+map=paste(dir,"ogut.chr1.txt",sep="")  # new genetic map
+gen_map<-fread(map) %>%
+  rename(pos=V1, cm=V3) %>% 
+  mutate(cm=cm+abs(min(cm)))
+sorted_gen_map=gen_map[order(gen_map$pos),]
+summary(gen_map)
+head(gen_map)
+#summary(lm(pos~cm,data=gen_map))
+#ggplot(data=gen_map,aes(x=pos,y=cm))+geom_point(alpha=.9,col="blue")+ xlab('BP Position') +ylab('Centimorgans')+ggtitle('BP vs CM Chromosome 1')
+#summary(lm(pos~cm,data=sorted_gen_map))
+```
+
+Allele Frequency *Used in NordBorg*
+```{r}
+Variant_Allele_Frequency<-fread("~/Background_Selection/out.frq",col.names =c("CHROM", "POS", "N_ALLELES","N_CHR","P","Q"),fill=TRUE) %>%
+  filter(N_ALLELES>1, !P=="C:1",!P=="A:1",!P=="G:1",!P=="T:1" )
+
+Variant_Allele_Frequency$QFreq<-substring(Variant_Allele_Frequency$Q,3,11)
+head(Variant_Allele_Frequency)
+```
+
+
+0-fold and 4-fold positions in genome for chromosome 1. **Which version (V4)?**
+```{r}
+Zerofold_and_Fourfold_Positions<-fread(paste(dir,"Zea_mays.B73_RefGen_v4.dna.toplevel.fa.fold",sep="")) #%>% filter(fold==0|fold==4,chrom=="1")
+summary(Zerofold_and_Fourfold_Positions)
+head(Zerofold_and_Fourfold_Positions)
+```
+
+
+
+Split into two dataframes for 0- and 4-fold
+```{r}
+Fourfold_Positions<-filter(Zerofold_and_Fourfold_Positions,fold==4)  %>% rename(POS=pos)
+Zerofold_Positions<-filter(Zerofold_and_Fourfold_Positions,fold==0) %>% rename(POS=pos)
+```
+
+Merge Zerofold_Positions with Allele Frequencies
+```{r}
+Zerofold_Positions<- full_join(Variant_Allele_Frequency,Zerofold_Positions) %>%
+  drop_na()
+```
+
+Nucleotide diversity $\pi$ on a per SNP basis. From what data? **APPEARS TO BE ERROR MISSING SITES BEYOND MB 260 ON CHR1**
+```{r}
+PC_Sites_PI<-fread(paste(dir,"PC.sites.pi",sep="")) 
+summary(PC_Sites_PI)
+head(PC_Sites_PI)
+```
+Nucleotide diversity $\pi$ on a per SNP basis. From PC_Teo_invariants_Chr1.vcf.gz
+
+```{r}
+PC_Sites_PI<-fread(paste(dir,"Invariants_PC.sites.pi",sep=""))
+summary(PC_Sites_PI)
+
+#ggplot(data=PC_Sites_PI,aes(x=PI))+geom_density()+xlab('PI')+ggtitle('Teo Invariants PI') 
+#quantile(PC_Sites_PI$PI,seq(0,1,.025))
+```
+
+
+make $\pi$ in windows of `pi_winsize`. groups in ranges based on `pi_winsize`, averages per SNP $\pi$, and creates columns for $\beta$ windows based on `beta_winsize`.
+```{r}
+window_pi<-group_by(PC_Sites_PI,win=cut(POS, 
+                                        breaks=seq(0, ceiling(max(PC_Sites_PI$POS)/pi_winsize)*pi_winsize, by=pi_winsize),
+                                        labels=seq(1, ceiling(max(PC_Sites_PI$POS)/pi_winsize)*pi_winsize, by=pi_winsize))) %>%
+  summarize(pi=mean(PI),NBR_BP=n()) %>% 
+  mutate(win_end=as.numeric(win)*pi_winsize,
+         mid=win_end-pi_winsize/2,
+         b_start=mid-beta_winsize/2,
+         b_end=mid+beta_winsize/2,
+         b_start=ifelse(b_start<0,0,b_start)) %>%
+  filter(NBR_BP>minsites) %>%
+  dplyr::select(pi, mid, b_start, b_end) %>%
+  na.omit()
+```
+
+Update `window_pi` with cM positions for windows; remove windows with NA (usually because before start of genetic map)
+```{r}
+window_pi<-mutate(window_pi,mid_cm=approx(x=gen_map$pos,y=gen_map$cm,xout=window_pi$mid)$y,
+                  bend_cm=approx(x=gen_map$pos,y=gen_map$cm,xout=window_pi$b_end)$y,
+                  bstart_cm=approx(x=gen_map$pos,y=gen_map$cm,xout=window_pi$b_start)$y) %>% 
+  na.omit()
+```
+
+Get cM positions for 0-FoldPositions; remove windows with NA (usually because before start of genetic map)
+```{r}
+mut_pos<-approx(x=gen_map$pos,y=gen_map$cm,xout=Zerofold_Positions$POS)$y %>% 
+  na.omit()
+head(mut_pos)
+length(mut_pos)
+```
+
+Get Allele Frequencies for 0-FoldPositions
+```{r}
+mut_q<-Zerofold_Positions$QFreq %>% as.numeric()
+length(mut_q)
+```
+
+McVicker  * r^2 of 6% with previous genetic map*
+```{r}
+BETA<-vector() #empty vector for BETA
+pb  <- txtProgressBar(1, 100, style=3) #progress bar!
+
+for(i in 1:length(window_pi$mid_cm)){ 
+  musites<-subset(mut_pos,mut_pos>=window_pi$bstart_cm[i] & mut_pos<=window_pi$bend_cm[i])/100 #subsetting 0-fold sites in our window, changing to Morgans
+  
+  
+  if(i%%10==0){ setTxtProgressBar(pb,i/(length(window_pi$mid_cm)))}
+  
+  
+  
+  if(length(musites)==0){
+    BETA[i]=NA
+  }else{
+    r=abs(musites-window_pi$mid_cm[i]/100)
+    #print(r)
+    #BETA[i]<- exp(-sum(sapply(r, function(m) sum(((mu * dfe) / ((dfe + m * (1 - dfe))^2)) * p_dfe)))) 
+    BETA[i]<- exp(-1*sum(unlist(sapply(1:(length(r)),function(i) integrate(function(x){mu*dtexp(x,a=1E-5,b=1,rate=1000)/(x*(1+(1-x)*r[i]/x)^2)},0.001,1))[1,])))
+  }
+}
+```
+
+Nordborg Beta $\beta=e^{-\sum_i\bigg(\sum_d q_i/\bigg(1+\frac{r_i(1-t_{id})}{t_{id}}\bigg)^2P(t_{id})\bigg)}$
+```{r}
+BETA<-vector() #empty vector for BETA
+pb  <- txtProgressBar(1, 100, style=3) #progress bar!
+mut_q_pos=data.frame(q=mut_q,pos=mut_pos)
+mut_q_pos=filter(mut_q_pos,q!="NaN")
+
+for(i in 1:length(window_pi$mid_cm)){ 
+  musites<-subset(mut_pos,mut_pos>=window_pi$bstart_cm[i] & mut_pos<=window_pi$bend_cm[i])/100 #subsetting 0-fold sites in our window, changing to Morgans
+  
+  
+  
+  if(i%%10==0){ setTxtProgressBar(pb,i/(length(window_pi$mid_cm)))}
+  
+  if(length(musites)==0){
+    BETA[i]=NA
+  }else{
+    r=abs(musites-window_pi$mid_cm[i]/100)
+    #print(r)
+    #BETA[i]<- exp(-sum(sapply(r, function(m) sum(((q) / (((1+ m * (1 - dfe))^2)) * p_dfe)))) 
+    BETA[i]<- exp(-sum(sapply(r, function(m) sum(((mu * dfe) / ((dfe + m * (1 - dfe))^2)) * p_dfe)))) 
+  }
+}
+```
+
+
+```{r}
+PI<-window_pi$pi[1:(length(BETA))]
+summary(lm(PI~BETA))
+BETA=na.omit(BETA)
+plot(BETA,PI)
+plot(smooth.spline(BETA),col="blue",lwd=1,type="l")
+length(BETA)
+length(PI)
+length(window_pi$mid)
+```
+
+
+
+
+

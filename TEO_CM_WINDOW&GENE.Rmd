@@ -1,0 +1,365 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+
+library(data.table)
+library(tidyverse)
+library(cowplot)
+
+
+```
+
+
+
+
+```{r}
+allpops_Chrom1<-fread("~/Desktop/All_pop_1Kb_filt.csv") %>% select(CHROM,BIN_START,BIN_END,PI,NBR_BP,pop,N_VARIANTS) %>% filter(CHROM==1)
+```
+
+
+
+
+
+get genetic map from Ogut 2015 for chromosome1; correct so minimum is 0
+```{r}
+gen_map<-fread("~/Desktop/ogut_fifthcM_map_agpv4_INCLUDE.txt") %>%
+   rename(name=V1, marker=V2, chrom=V4, pos=V5, cm=V3) %>% 
+  filter(chrom==1) %>% mutate(cm=cm+abs(min(cm)))
+```
+
+Get positon of Genes, RNA, EXONS,CDS five_prime_UTR from Zea_mays.B73_RefGen_v4.44.chromosome.1.gff3
+```{r}
+read.delim("~/Downloads/Zea_mays.B73_RefGen_v4.44.chromosome.1.gff3", header=F, comment.char="#") -> gff
+ 
+```
+
+View Data
+```{r}
+read.delim("~/Downloads/Zea_mays.B73_RefGen_v4.44.chromosome.1.gff3", header=F, comment.char="#")
+```
+Filtering data so we only get data for genes, removing columns
+```{r}
+Gene_position<-filter(gff, V3=="gene")  %>%
+  select(-V8, -V6, -V9)  
+
+```
+
+
+
+
+
+let’s get cm positions for genes in each pop; remove genes with NA (usually because before start of genetic map)
+```{r}
+teo_palmarCM_gene1<-mutate(Gene_position,cm_start=approx(x=gen_map$pos,y=gen_map$cm,xout=Gene_position$V4)$y) %>%
+  mutate(cm_end=approx(x=gen_map$pos,y=gen_map$cm,xout=Gene_position$V5)$y) %>%
+  mutate(rec=cm_end-cm_start) %>% filter(rec!="NA")
+```
+
+Cleaning up data, removing columns, renaming certain columns so they can be read by bedtools, convernting CM to integers by multiplying 1000000000 and removing decimal places
+```{r}
+TEO_CM_GENE<-teo_palmarCM_gene1 %>% select(-V2,-V3,-V4,-V5,-V7,-rec) %>% mutate(cm_start=cm_start*1000000000, cm_end=cm_end*1000000000) %>% mutate (cm_start=round(cm_start, digits=0), cm_end=round(cm_end, digits=0)) %>% rename(chrom=V1, chromStart=cm_start, chromEnd=cm_end) 
+
+TEO_CM_GENE$chrom<-"chr1" 
+
+```
+
+```{r}
+
+
+
+
+
+view(TEO_CM_GENE)
+```
+
+
+
+
+Get Window positions from any Teosinte population
+```{r}
+teo_palmar_Chrom1<-filter(allpops_Chrom1,pop=="Teo_Palmar_Chico")
+```
+let’s get cm positions for windows in each pop; remove windows with NA (usually because before start of genetic map)
+```{r}
+teo_palmar_Chrom1<-mutate(teo_palmar_Chrom1,cm_start=approx(x=gen_map$pos,y=gen_map$cm,xout=teo_palmar_Chrom1$BIN_START)$y) %>%
+  mutate(cm_end=approx(x=gen_map$pos,y=gen_map$cm,xout=teo_palmar_Chrom1$BIN_END)$y) %>%
+  mutate(rec=cm_end-cm_start) %>% filter(rec!="NA")
+
+```
+
+
+Cleaning up data, removing columns, renaming certain columns so they can be read by bedtools, convernting CM to integers by multiplying 1000000000 and removing decimal places
+```{r}
+TEO_CM_WINDOW<-teo_palmar_Chrom1 %>% select(-BIN_START, -BIN_END, -PI, -NBR_BP, -pop, -N_VARIANTS, -rec) %>% mutate(cm_start=cm_start*1000000000, cm_end=cm_end*1000000000) %>% mutate (cm_start=round(cm_start, digits=0), cm_end=round(cm_end, digits=0)) %>% rename(chrom=CHROM, chromStart=cm_start, chromEnd=cm_end) 
+
+TEO_CM_WINDOW$chrom<-"chr1" 
+```
+
+
+
+```{r}
+view(TEO_CM_WINDOW)
+```
+No e in my textfiles...Eliminating scientific notation
+```{r}
+options(scipen = 999)
+
+```
+
+Make Textfiles
+```{r}
+#write.table(TEO_CM_GENE, file="TEO_CM_GENEnoE.txt",row.names=F,quote=F,sep="\t")
+```
+
+```{r}
+#write.table(TEO_CM_WINDOW, file="TEO_CM_WINDOWnoE.txt",row.names=F,quote=F,sep="\t")
+```
+
+
+```{r}
+read.delim("~/Documents/Distance_Between_Window_and_Gene_CM.txt", header=F, comment.char="#")-> Distance_Between_Window_and_Gene_CM.txt  
+```
+
+```{r}
+Distance_Between_Window_and_Gene_CM.txt<-Distance_Between_Window_and_Gene_CM.txt %>% rename(chromWindow=V1, WindowCM_Start=V2, WindowCM_End=V3, chromGene=V4, GeneCM_Start=V5, GeneCM_End=V6, Distance=V7 )
+```
+
+```{r}
+#TeoPalmarPI<-mutate(TeoPalmarPI,cm_start=approx(x=gen_map$pos,y=gen_map$cm,xout=TeoPalmarPI$BIN_START)$y) %>%
+  #mutate(cm_end=approx(x=gen_map$pos,y=gen_map$cm,xout=TeoPalmarPI$BIN_END)$y) %>%
+  #mutate(rec=cm_end-cm_start) %>% filter(rec!="NA")
+```
+
+```{r}
+#view(TeoPalmarPI)
+```
+
+
+```{r}
+#TeoPalmarPI<-TeoPalmarPI %>% select(-CHROM,-BIN_START,-BIN_END,-NBR_BP,-N_VARIANTS,-pop,-rec,-cm_start,-cm_end)
+```
+
+
+```{r}
+#Distance_Between_Window_and_Gene_CM.txt$PI<-TeoPalmarPI$PI
+```
+
+
+```{r}
+Distance_Between_Window_and_Gene_CM.txt<-Distance_Between_Window_and_Gene_CM.txt %>% mutate(WindowCM_Start=WindowCM_Start/1000000000,WindowCM_End=WindowCM_End/1000000000,GeneCM_Start=GeneCM_Start/1000000000,GeneCM_End=GeneCM_End/1000000000, Distance=Distance/1000000000 ) 
+
+```
+
+```{r}
+view(Distance_Between_Window_and_Gene_CM.txt)
+```
+
+
+```{r}
+#ggplot(aes(x=Distance,y=PI))+
+  #geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+
+Needs to be fixed...Backwards bedtools
+```{r}
+#read.delim("~/Documents/Relative_Distance_Between_Window_and_Gene_CM.txt", header=F, comment.char="#")-> Relative_Distance_Between_Window_and_Gene_CM.txt  
+```
+
+```{r}
+#Relative_Distance_Between_Window_and_Gene_CM.txt<-Relative_Distance_Between_Window_and_Gene_CM.txt %>% rename(chromWindow=V1, WindowCM_Start=V2, WindowCM_End=V3, chromGene=V4, GeneCM_Start=V5, GeneCM_End=V6, Distance=V7 )
+```
+
+```{r}
+#Relative_Distance_Between_Window_and_Gene_CM.txt<-Relative_Distance_Between_Window_and_Gene_CM.txt %>% mutate(WindowCM_Start=WindowCM_Start/1000000000,WindowCM_End=WindowCM_End/1000000000,GeneCM_Start=GeneCM_Start/1000000000,GeneCM_End=GeneCM_End/1000000000, Distance=Distance/1000000000 ) 
+
+```
+
+```{r}
+#view(Relative_Distance_Between_Window_and_Gene_CM.txt)
+
+```
+
+```{r}
+read.delim("~/Documents/FirstDistance_Between_Window_and_Gene_CM.txt", header=F, comment.char="#")-> FirstDistance_Between_Window_and_Gene_CM.txt  
+```
+
+
+```{r}
+FirstDistance_Between_Window_and_Gene_CM.txt<-FirstDistance_Between_Window_and_Gene_CM.txt %>% rename(chromWindow=V1, WindowCM_Start=V2, WindowCM_End=V3, chromGene=V4, GeneCM_Start=V5, GeneCM_End=V6, Distance=V7 )
+```
+
+```{r}
+FirstDistance_Between_Window_and_Gene_CM.txt<-FirstDistance_Between_Window_and_Gene_CM.txt %>% mutate(WindowCM_Start=WindowCM_Start/1000000000,WindowCM_End=WindowCM_End/1000000000,GeneCM_Start=GeneCM_Start/1000000000,GeneCM_End=GeneCM_End/1000000000, Distance=Distance/1000000000 ) 
+
+```
+
+
+```{r}
+TeoPalmarPI<-filter(allpops_Chrom1,pop=="Teo_Palmar_Chico")
+```
+
+
+```{r}
+TeoPalmarPI<-mutate(TeoPalmarPI,cm_start=approx(x=gen_map$pos,y=gen_map$cm,xout=TeoPalmarPI$BIN_START)$y) %>%
+  mutate(cm_end=approx(x=gen_map$pos,y=gen_map$cm,xout=TeoPalmarPI$BIN_END)$y) %>%
+  mutate(rec=cm_end-cm_start) %>% filter(rec!="NA")
+```
+
+
+
+```{r}
+TeoPalmarPI<-TeoPalmarPI %>% select(-CHROM,-BIN_START,-BIN_END,-NBR_BP,-N_VARIANTS,-pop,-rec,-cm_start,-cm_end)
+```
+
+
+```{r}
+FirstDistance_Between_Window_and_Gene_CM.txt$PI<-TeoPalmarPI$PI
+```
+
+```{r}
+view(FirstDistance_Between_Window_and_Gene_CM.txt) 
+```
+
+```{r}
+FiltFirstDistance_Between_Window_and_Gene_CM.txt<- filter(FirstDistance_Between_Window_and_Gene_CM.txt, Distance<.00025)
+```
+  
+```{r}
+ggplot(FiltFirstDistance_Between_Window_and_Gene_CM.txt,aes(x=Distance,y=PI))+
+  geom_point(color="black",alpha=.1) + geom_smooth()
+```
+
+```{r}
+summary(FirstDistance_Between_Window_and_Gene_CM.txt)
+```
+
+
+```{r}
+read.delim("~/Documents/LastDistance_Between_Window_and_Gene_CM.txt", header=F, comment.char="#")-> LastDistance_Between_Window_and_Gene_CM.txt  
+```
+
+
+```{r}
+LastDistance_Between_Window_and_Gene_CM.txt<-LastDistance_Between_Window_and_Gene_CM.txt %>% rename(chromWindow=V1, WindowCM_Start=V2, WindowCM_End=V3, chromGene=V4, GeneCM_Start=V5, GeneCM_End=V6, Distance=V7 )
+```
+
+```{r}
+LastDistance_Between_Window_and_Gene_CM.txt<-LastDistance_Between_Window_and_Gene_CM.txt %>% mutate(WindowCM_Start=WindowCM_Start/1000000000,WindowCM_End=WindowCM_End/1000000000,GeneCM_Start=GeneCM_Start/1000000000,GeneCM_End=GeneCM_End/1000000000, Distance=Distance/1000000000 ) 
+
+```
+
+
+```{r}
+TeoPalmarPI<-filter(allpops_Chrom1,pop=="Teo_Palmar_Chico")
+```
+
+
+```{r}
+TeoPalmarPI<-mutate(TeoPalmarPI,cm_start=approx(x=gen_map$pos,y=gen_map$cm,xout=TeoPalmarPI$BIN_START)$y) %>%
+  mutate(cm_end=approx(x=gen_map$pos,y=gen_map$cm,xout=TeoPalmarPI$BIN_END)$y) %>%
+  mutate(rec=cm_end-cm_start) %>% filter(rec!="NA")
+```
+
+
+
+```{r}
+TeoPalmarPI<-TeoPalmarPI %>% select(-CHROM,-BIN_START,-BIN_END,-NBR_BP,-N_VARIANTS,-pop,-rec,-cm_start,-cm_end)
+```
+
+
+```{r}
+LastDistance_Between_Window_and_Gene_CM.txt$PI<-TeoPalmarPI$PI
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+view(LastDistance_Between_Window_and_Gene_CM.txt) 
+```
+
+```{r}
+LastDistance_Between_Window_and_Gene_CM.txt 
+```
+
+```{r}
+summary(LastDistance_Between_Window_and_Gene_CM.txt)
+```
+
+```{r}
+ggplot(LastDistance_Between_Window_and_Gene_CM.txt, aes(x=Distance,y=PI))+
+  geom_point(color="black",alpha=.1) + geom_smooth(method="lm",se=FALSE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+fit <- lm(Distance ~ PI, data = LastDistance_Between_Window_and_Gene_CM.txt)
+summary(fit)
+```
+
+
+```{r}
+ 
+
+
+
+
+
+
+
+ggplot(LastDistance_Between_Window_and_Gene_CM.txt, aes(x=Distance, y=PI)) + geom_point(alpha=.1) +
+      geom_smooth(method=lm, se=FALSE) + ggtitle("                                                     Distance vs PI") +
+      
+  annotate("rect", xmin = 0.25, xmax = 0.35, ymin = 0.05, ymax = 0.1, fill="white", colour="red") +    
+  annotate("text", x=0.3, y=0.085, label = "R^2 == 0.002433", parse=T) +
+      annotate("text", x=0.3, y=0.075, label = "alpha == 0.0125", parse=T) +
+      annotate("text", x=0.3, y=0.065, label = "beta == 0.0972391", parse=T) +
+  annotate("text", x=.3,y=.055, label = "y==alpha + beta*x",  parse=T)
+
+```
+
+
+```{r}
+write.table(FirstDistance_Between_Window_and_Gene_CM.txt, file="EditedFirstDistance_Between_Window_and_Gene_CM.txt",row.names=F,quote=F,sep="\t")
+```
+

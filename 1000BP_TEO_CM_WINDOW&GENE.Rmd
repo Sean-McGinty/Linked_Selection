@@ -1,0 +1,391 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(data.table)
+library(tidyverse)
+library(cowplot)
+```
+
+
+
+Download all our Data for chromosome 1
+```{r}
+allpops_Chrom1<-fread("~/Desktop/All_pop_1Kb_filt.csv") %>% select(CHROM,BIN_START,BIN_END,PI,NBR_BP,pop,N_VARIANTS) %>% filter(CHROM==1)
+```
+
+get genetic map from Ogut 2015 for chromosome1; correct so minimum is 0
+```{r}
+gen_map<-fread("~/Desktop/ogut_fifthcM_map_agpv4_INCLUDE.txt") %>%
+   rename(name=V1, marker=V2, chrom=V4, pos=V5, cm=V3) %>% 
+  filter(chrom==1) %>% mutate(cm=cm+abs(min(cm)))
+```
+
+Get positon of Genes, RNA, EXONS,CDS five_prime_UTR from Zea_mays.B73_RefGen_v4.44.chromosome.1.gff3
+```{r}
+read.delim("~/Downloads/Zea_mays.B73_RefGen_v4.44.chromosome.1.gff3", header=F, comment.char="#") -> gff
+ 
+```
+
+Filtering data so we only get data for genes, removing columns
+```{r}
+Gene_position<-filter(gff, V3=="gene")  %>%
+  select(-V8, -V6, -V9)  
+
+```
+
+let’s get cm positions for genes in each pop; remove genes with NA (usually because before start of genetic map)
+```{r}
+teo_CM_gene1<-mutate(Gene_position,cm_start=approx(x=gen_map$pos,y=gen_map$cm,xout=Gene_position$V4)$y) %>%
+  mutate(cm_end=approx(x=gen_map$pos,y=gen_map$cm,xout=Gene_position$V5)$y) %>%
+  mutate(rec=cm_end-cm_start) %>% filter(rec!="NA")
+```
+
+Cleaning up data, removing columns, renaming certain columns so they can be read by bedtools, convernting CM to integers by multiplying 1000000000 and removing decimal places (Bedtools only reads integers)
+```{r}
+TEO_CM_GENE_CHROM_1<-teo_CM_gene1 %>% select(-V2,-V3,-V4,-V5,-V7,-rec) %>% mutate(cm_start=cm_start*1000000000, cm_end=cm_end*1000000000) %>% mutate (cm_start=round(cm_start, digits=0), cm_end=round(cm_end, digits=0)) %>% rename(chrom=V1, chromStart=cm_start, chromEnd=cm_end) 
+
+TEO_CM_GENE_CHROM_1$chrom<-"chr1" 
+```
+
+Get any possible Window positions from any Teosinte population Chrom 1 and rearragning them in the order that bedtools can read 
+```{r}
+TEOWindows <- data.frame(BIN_START=seq(33001,306878001,1000),
+                 BIN_END=seq(34000,306879000,1000),
+                 chrom="chr1")
+                 
+TEOWindows<-TEOWindows[c("chrom", "BIN_START", "BIN_END")]
+
+```
+
+Get cm positions for windows in each pop; remove windows with NA (usually because before start of genetic map)
+```{r}
+TEOWindows<-mutate(TEOWindows,cm_start=approx(x=gen_map$pos,y=gen_map$cm,xout=TEOWindows$BIN_START)$y) %>%
+  mutate(cm_end=approx(x=gen_map$pos,y=gen_map$cm,xout=TEOWindows$BIN_END)$y) %>%
+  mutate(rec=cm_end-cm_start) %>% filter(rec!="NA")
+```
+
+Cleaning up data, removing columns, renaming certain columns so they can be read by bedtools, converting CM to integers by multiplying 1000000000 and removing decimal places
+```{r}
+TEO_All_POPS_CM_WINDOW_CHROM_1<-TEOWindows %>% select(-BIN_START, -BIN_END,  -rec) %>% mutate(cm_start=cm_start*1000000000, cm_end=cm_end*1000000000) %>% mutate (cm_start=round(cm_start, digits=0), cm_end=round(cm_end, digits=0)) %>% rename( chromStart=cm_start, chromEnd=cm_end)
+```
+
+
+No e in my textfiles...Eliminating scientific notation
+```{r}
+options(scipen = 999)
+```
+
+Make Textfiles for Bedtools
+```{r}
+write.table(TEO_CM_GENE_CHROM_1, file="TEO_CM_GENE_CHROM_1.txt",row.names=F,quote=F,sep="\t")
+write.table(TEO_All_POPS_CM_WINDOW_CHROM_1, file="TEO_All_POPS_CM_WINDOW_CHROM_1.txt",row.names=F,quote=F,sep="\t")
+```
+
+Read Bedtools distance file
+```{r}
+read.delim("~/Documents/All_TEO_Distance_Between_1000BPWindow_and_Gene_CM_Chrom1.txt", header=F, comment.char="#")-> All_TEO_Distance_Between_1000BPWindow_and_Gene_CM.txt  
+```
+
+Renaming Column names for TEOBedtools file
+```{r}
+All_TEO_Distance_Between_1000BPWindow_and_Gene_CM_Chrom1.txt<-All_TEO_Distance_Between_1000BPWindow_and_Gene_CM_Chrom1.txt %>% rename(chromWindow=V1, cm_start=V2, cm_end=V3, chromGene=V4, GeneCM_Start=V5, GeneCM_End=V6, Distance=V7 )
+```
+
+Converting integer CM back into CM (Bedtools only reads integers)
+```{r}
+All_TEO_Distance_Between_1000BPWindow_and_Gene_CM_Chrom1.txt<-All_TEO_Distance_Between_1000BPWindow_and_Gene_CM.txt %>% mutate(cm_start=cm_start/1000000000,cm_end=cm_end/1000000000,GeneCM_Start=GeneCM_Start/1000000000,GeneCM_End=GeneCM_End/1000000000, Distance=Distance/1000000000 ) 
+```  
+
+Lets get data for our Teosinte populations
+```{r}
+teo_palmar_Chrom1<-filter(allpops_Chrom1,pop=="Teo_Palmar_Chico")
+teo_sanlo_Chrom1<-filter(allpops_Chrom1,pop=="Teo_San_Lorenzo")
+teo_amatlan_Chrom1<-filter(allpops_Chrom1,pop=="Teo_Amatlan_de_Canas")
+teo_elrodeo_Chrom1<-filter(allpops_Chrom1,pop=="Teo_El_Rodeo")
+teo_cruc_Chrom1<-filter(allpops_Chrom1,pop=="Teo_Crucero_Lagunitas")
+teo_losguajes_Chrom1<-filter(allpops_Chrom1,pop=="Teo_Los_Guajes")
+```
+
+
+Lets get CM positions for our Windows in our Teosinte data
+```{r}
+teo_palmar_Chrom1<-mutate(teo_palmar_Chrom1,cm_start=approx(x=gen_map$pos,y=gen_map$cm,xout=teo_palmar_Chrom1$BIN_START)$y) %>%
+  mutate(cm_end=approx(x=gen_map$pos,y=gen_map$cm,xout=teo_palmar_Chrom1$BIN_END)$y) %>%
+  mutate(rec=cm_end-cm_start) %>% filter(rec!="NA")
+
+teo_sanlo_Chrom1<-mutate(teo_sanlo_Chrom1,cm_start=approx(x=gen_map$pos,y=gen_map$cm,xout=teo_sanlo_Chrom1$BIN_START)$y) %>%
+  mutate(cm_end=approx(x=gen_map$pos,y=gen_map$cm,xout=teo_sanlo_Chrom1$BIN_END)$y) %>%
+  mutate(rec=cm_end-cm_start) %>% filter(rec!="NA")
+
+teo_amatlan_Chrom1<-mutate(teo_amatlan_Chrom1,cm_start=approx(x=gen_map$pos,y=gen_map$cm,xout=teo_amatlan_Chrom1$BIN_START)$y) %>%
+  mutate(cm_end=approx(x=gen_map$pos,y=gen_map$cm,xout=teo_amatlan_Chrom1$BIN_END)$y) %>%
+  mutate(rec=cm_end-cm_start) %>% filter(rec!="NA")
+
+teo_elrodeo_Chrom1<-mutate(teo_elrodeo_Chrom1,cm_start=approx(x=gen_map$pos,y=gen_map$cm,xout=teo_elrodeo_Chrom1$BIN_START)$y) %>%
+  mutate(cm_end=approx(x=gen_map$pos,y=gen_map$cm,xout=teo_elrodeo_Chrom1$BIN_END)$y) %>%
+  mutate(rec=cm_end-cm_start) %>% filter(rec!="NA")
+
+teo_cruc_Chrom1<-mutate(teo_cruc_Chrom1,cm_start=approx(x=gen_map$pos,y=gen_map$cm,xout=teo_cruc_Chrom1$BIN_START)$y) %>%
+  mutate(cm_end=approx(x=gen_map$pos,y=gen_map$cm,xout=teo_cruc_Chrom1$BIN_END)$y) %>%
+  mutate(rec=cm_end-cm_start) %>% filter(rec!="NA")
+
+teo_losguajes_Chrom1<-mutate(teo_losguajes_Chrom1,cm_start=approx(x=gen_map$pos,y=gen_map$cm,xout=teo_losguajes_Chrom1$BIN_START)$y) %>%
+  mutate(cm_end=approx(x=gen_map$pos,y=gen_map$cm,xout=teo_losguajes_Chrom1$BIN_END)$y) %>%
+  mutate(rec=cm_end-cm_start) %>% filter(rec!="NA")
+
+```
+
+Fixing rounding discrepancies between Bedtools file and Teosinte data so that they can be merged 
+```{r}
+teo_palmar_Chrom1<- teo_palmar_Chrom1 %>% mutate(cm_start=round(cm_start, digits=8), cm_end=round(cm_end, digits=8))
+teo_sanlo_Chrom1<- teo_sanlo_Chrom1 %>% mutate(cm_start=round(cm_start, digits=8), cm_end=round(cm_end, digits=8))
+teo_amatlan_Chrom1<- teo_amatlan_Chrom1 %>% mutate(cm_start=round(cm_start, digits=8), cm_end=round(cm_end, digits=8))
+teo_elrodeo_Chrom1<- teo_elrodeo_Chrom1 %>% mutate(cm_start=round(cm_start, digits=8), cm_end=round(cm_end, digits=8))
+teo_cruc_Chrom1<- teo_cruc_Chrom1 %>% mutate(cm_start=round(cm_start, digits=8), cm_end=round(cm_end, digits=8))
+teo_losguajes_Chrom1<- teo_losguajes_Chrom1 %>% mutate(cm_start=round(cm_start, digits=8), cm_end=round(cm_end, digits=8))
+All_TEO_Distance_Between_1000BPWindow_and_Gene_CM.txt<- All_TEO_Distance_Between_1000BPWindow_and_Gene_CM.txt %>% mutate(cm_start=round(cm_start, digits=8), cm_end=round(cm_end, digits=8))
+```
+
+Merging Bedtools file with Teosinte data
+```{r}
+Teo_Palmar_Chico_PI_Distance<- full_join(All_TEO_Distance_Between_1000BPWindow_and_Gene_CM_Chrom1.txt,teo_palmar_Chrom1)
+Teo_San_Lorenzo_PI_Distance<- full_join(All_TEO_Distance_Between_1000BPWindow_and_Gene_CM_Chrom1.txt,teo_sanlo_Chrom1)
+Teo_El_Rodeo_PI_Distance<- full_join(All_TEO_Distance_Between_1000BPWindow_and_Gene_CM_Chrom1.txt,teo_elrodeo_Chrom1)
+Teo_Los_Guajes_PI_Distance<- full_join(All_TEO_Distance_Between_1000BPWindow_and_Gene_CM_Chrom1.txt,teo_losguajes_Chrom1)
+Teo_Amatlan_De_Casas_PI_Distance<- full_join(All_TEO_Distance_Between_1000BPWindow_and_Gene_CM_Chrom1.txt,teo_amatlan_Chrom1)
+Teo_Crucero_Lagunitas_PI_Distance<- full_join(All_TEO_Distance_Between_1000BPWindow_and_Gene_CM_Chrom1.txt,teo_cruc_Chrom1)
+
+```
+
+Removing NA and filtering data so that only distance values below .01 are shown
+```{r}
+Teo_Palmar_Chico_PI_Distance<-drop_na(Teo_Palmar_Chico_PI_Distance) %>% filter(Distance<.01)
+Teo_San_Lorenzo_PI_Distance<-drop_na(Teo_San_Lorenzo_PI_Distance) %>% filter(Distance<.01)
+Teo_El_Rodeo_PI_Distance<-drop_na(Teo_El_Rodeo_PI_Distance) %>% filter(Distance<.01)
+Teo_Los_Guajes_PI_Distance<-drop_na(Teo_Los_Guajes_PI_Distance) %>% filter(Distance<.01)
+Teo_Amatlan_De_Casas_PI_Distance<-drop_na(Teo_Amatlan_De_Casas_PI_Distance) %>% filter(Distance<.01)
+Teo_Crucero_Lagunitas_PI_Distance<-drop_na(Teo_Crucero_Lagunitas_PI_Distance) %>% filter(Distance<.01)
+```
+
+Making a cubic spline for PI vs Distance from Gene for all Teosinte Populations for Chromosome 1
+```{r}
+
+smooth.spline(y=Teo_Palmar_Chico_PI_Distance$PI,x=Teo_Palmar_Chico_PI_Distance$Distance) %>%
+plot(col="blue",lwd=1,type="l",xlab="Distance from Gene in CM",ylab=expression(pi),cex.lab=2,cex.axis=1.5,main="Teo_Palmar_Chico_Chrom_1")
+
+smooth.spline(y=Teo_San_Lorenzo_PI_Distance$PI,x=Teo_San_Lorenzo_PI_Distance$Distance) %>%
+plot(col="blue",lwd=1,type="l",xlab="Distance from Gene in CM",ylab=expression(pi),cex.lab=2,cex.axis=1.5,main="Teo_San_Lorenzo_Chrom_1")
+
+smooth.spline(y=Teo_El_Rodeo_PI_Distance$PI,x=Teo_El_Rodeo_PI_Distance$Distance) %>%
+plot(col="blue",lwd=1,type="l",xlab="Distance from Gene in CM",ylab=expression(pi),cex.lab=2,cex.axis=1.5,main="Teo_El_Rodeo_Chrom_1")
+
+smooth.spline(y=Teo_Los_Guajes_PI_Distance$PI,x=Teo_Los_Guajes_PI_Distance$Distance) %>%
+plot(col="blue",lwd=1,type="l",xlab="Distance from Gene in CM",ylab=expression(pi),cex.lab=2,cex.axis=1.5,main="Teo_Los_Guajes_Chrom_1")
+
+smooth.spline(y=Teo_Crucero_Lagunitas_PI_Distance$PI,x=Teo_Crucero_Lagunitas_PI_Distance$Distance) %>%
+plot(col="blue",lwd=1,type="l",xlab="Distance from Gene in CM",ylab=expression(pi),cex.lab=2,cex.axis=1.5,main="Teo_Crucero_Lagunitas_Chrom_1")
+
+smooth.spline(y=Teo_Amatlan_De_Casas_PI_Distance$PI,x=Teo_Amatlan_De_Casas_PI_Distance$Distance) %>%
+plot(col="blue",lwd=1,type="l",xlab="Distance from Gene in CM",ylab=expression(pi),cex.lab=2,cex.axis=1.5,main="Teo_Amatlan_De_Casas_Chrom_1")
+
+```
+Putting all PI vs Distance from Gene for TEO on a single plot
+```{r}
+a<-smooth.spline(y=Teo_Palmar_Chico_PI_Distance$PI,x=Teo_Palmar_Chico_PI_Distance$Distance)
+b<-smooth.spline(y=Teo_San_Lorenzo_PI_Distance$PI,x=Teo_San_Lorenzo_PI_Distance$Distance) 
+c<-smooth.spline(y=Teo_Amatlan_De_Casas_PI_Distance$PI,x=Teo_Amatlan_De_Casas_PI_Distance$Distance)
+d<-smooth.spline(y=Teo_Crucero_Lagunitas_PI_Distance$PI,x=Teo_Crucero_Lagunitas_PI_Distance$Distance)
+e<-smooth.spline(y=Teo_Los_Guajes_PI_Distance$PI,x=Teo_Los_Guajes_PI_Distance$Distance)
+f<-smooth.spline(y=Teo_El_Rodeo_PI_Distance$PI,x=Teo_El_Rodeo_PI_Distance$Distance)
+plot(a, col="blue",lwd=1,type="l",xlim=c(0, .01),ylim=c(0,.02),xlab="Distance from Gene in CM",ylab=expression(pi),cex.lab=2,cex.axis=1.5,main="PI vs Distance for Teosinte for Chromosome 1")
+lines(b,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="red" )
+lines(c,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="green" )
+lines(d,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="orange" )
+lines(e,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="yellow" )
+lines(f,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="purple" )
+legend(.002,.01, legend=c("Palmar Chico", "San Lorenzo", "Amatlan de Casas", "Crucero Lagunitas", "Los Guajes", "El Rodeo"),
+       col=c("blue", "red", "green","orange","yellow","purple"), lty=1, cex=0.8)
+
+```
+Get any possible Window positions from any Land Race population Chrom 1 and rearragning them in the order that bedtools can read 
+```{r}
+#LRfive_pops_Chrom1<-rbind(lr_palmar_Chrom1,lr_sanlo_Chrom1,lr_amatlan_Chrom1,lr_losguajes_Chrom1,lr_cruc_Chrom1) 
+LRWindows <- data.frame(BIN_START=seq(1,307039001,1000),
+                 BIN_END=seq(1000,307040000,1000),
+                 chrom="chr1")
+                 
+LRWindows<-LRWindows[c("chrom", "BIN_START", "BIN_END")]
+
+```
+Get cm positions for windows in each pop; remove windows with NA (usually because before start of genetic map)
+```{r}
+LRWindows<-mutate(LRWindows,cm_start=approx(x=gen_map$pos,y=gen_map$cm,xout=LRWindows$BIN_START)$y) %>%
+  mutate(cm_end=approx(x=gen_map$pos,y=gen_map$cm,xout=LRWindows$BIN_END)$y) %>%
+  mutate(rec=cm_end-cm_start) %>% filter(rec!="NA")
+```
+
+Cleaning up data, removing columns, renaming certain columns so they can be read by bedtools, converting CM to integers by multiplying 1000000000 and removing decimal places
+```{r}
+LR_All_POPS_CM_WINDOW_CHROM_1<-Windows %>% select(-BIN_START, -BIN_END,  -rec) %>% mutate(cm_start=cm_start*1000000000, cm_end=cm_end*1000000000) %>% mutate (cm_start=round(cm_start, digits=0), cm_end=round(cm_end, digits=0)) %>% rename( chromStart=cm_start, chromEnd=cm_end)
+```
+
+
+No e in my textfiles...Eliminating scientific notation
+```{r}
+options(scipen = 999)
+```
+
+Make Textfiles for LR Bedtools
+```{r}
+write.table(LR_All_POPS_CM_WINDOW_CHROM_1, file="LR_All_POPS_CM_WINDOW_CHROM_1.txt",row.names=F,quote=F,sep="\t")
+```
+
+Read LR Bedtools distance file
+```{r}
+read.delim("~/Documents/All_LR_Distance_Between_1000BPWindow_and_Gene_CM_Chrom1.txt", header=F, comment.char="#")-> All_LR_Distance_Between_1000BPWindow_and_Gene_CM_Chrom1.txt  
+```
+
+Renaming Column names for LR Bedtools file
+```{r}
+All_LR_Distance_Between_1000BPWindow_and_Gene_CM_Chrom1.txt<-All_LR_Distance_Between_1000BPWindow_and_Gene_CM_Chrom1.txt %>% rename(chromWindow=V1, cm_start=V2, cm_end=V3, chromGene=V4, GeneCM_Start=V5, GeneCM_End=V6, Distance=V7 )
+```
+
+Converting integer CM back into CM (Bedtools only reads integers)
+```{r}
+All_LR_Distance_Between_1000BPWindow_and_Gene_CM_Chrom1.txt<-All_LR_Distance_Between_1000BPWindow_and_Gene_CM_Chrom1.txt %>% mutate(cm_start=cm_start/1000000000,cm_end=cm_end/1000000000,GeneCM_Start=GeneCM_Start/1000000000,GeneCM_End=GeneCM_End/1000000000, Distance=Distance/1000000000 ) 
+```  
+Lets get data for our Land Race populations
+```{r}
+lr_palmar_Chrom1<-filter(allpops_Chrom1,pop=="LR_Palmar_Chico")
+lr_sanlo_Chrom1<-filter(allpops_Chrom1,pop=="LR_San_Lorenzo")
+lr_amatlan_Chrom1<-filter(allpops_Chrom1,pop=="LR_Amatlan_de_Canas")
+
+lr_cruc_Chrom1<-filter(allpops_Chrom1,pop=="LR_Crucero_Lagunitas")
+lr_losguajes_Chrom1<-filter(allpops_Chrom1,pop=="LR_Los_Guajes")
+```
+
+
+Lets get CM positions for our Windows in our Land Race data
+```{r}
+lr_palmar_Chrom1<-mutate(lr_palmar_Chrom1,cm_start=approx(x=gen_map$pos,y=gen_map$cm,xout=lr_palmar_Chrom1$BIN_START)$y) %>%
+  mutate(cm_end=approx(x=gen_map$pos,y=gen_map$cm,xout=lr_palmar_Chrom1$BIN_END)$y) %>%
+  mutate(rec=cm_end-cm_start) %>% filter(rec!="NA")
+
+lr_sanlo_Chrom1<-mutate(lr_sanlo_Chrom1,cm_start=approx(x=gen_map$pos,y=gen_map$cm,xout=lr_sanlo_Chrom1$BIN_START)$y) %>%
+  mutate(cm_end=approx(x=gen_map$pos,y=gen_map$cm,xout=lr_sanlo_Chrom1$BIN_END)$y) %>%
+  mutate(rec=cm_end-cm_start) %>% filter(rec!="NA")
+
+lr_amatlan_Chrom1<-mutate(lr_amatlan_Chrom1,cm_start=approx(x=gen_map$pos,y=gen_map$cm,xout=lr_amatlan_Chrom1$BIN_START)$y) %>%
+  mutate(cm_end=approx(x=gen_map$pos,y=gen_map$cm,xout=lr_amatlan_Chrom1$BIN_END)$y) %>%
+  mutate(rec=cm_end-cm_start) %>% filter(rec!="NA")
+
+
+
+lr_cruc_Chrom1<-mutate(lr_cruc_Chrom1,cm_start=approx(x=gen_map$pos,y=gen_map$cm,xout=lr_cruc_Chrom1$BIN_START)$y) %>%
+  mutate(cm_end=approx(x=gen_map$pos,y=gen_map$cm,xout=lr_cruc_Chrom1$BIN_END)$y) %>%
+  mutate(rec=cm_end-cm_start) %>% filter(rec!="NA")
+
+lr_losguajes_Chrom1<-mutate(lr_losguajes_Chrom1,cm_start=approx(x=gen_map$pos,y=gen_map$cm,xout=lr_losguajes_Chrom1$BIN_START)$y) %>%
+  mutate(cm_end=approx(x=gen_map$pos,y=gen_map$cm,xout=lr_losguajes_Chrom1$BIN_END)$y) %>%
+  mutate(rec=cm_end-cm_start) %>% filter(rec!="NA")
+
+```
+
+Fixing rounding discrepancies between Bedtools file and Land Race data so that they can be merged 
+```{r}
+lr_palmar_Chrom1<- lr_palmar_Chrom1 %>% mutate(cm_start=round(cm_start, digits=8), cm_end=round(cm_end, digits=8))
+lr_sanlo_Chrom1<- lr_sanlo_Chrom1 %>% mutate(cm_start=round(cm_start, digits=8), cm_end=round(cm_end, digits=8))
+lr_amatlan_Chrom1<- lr_amatlan_Chrom1 %>% mutate(cm_start=round(cm_start, digits=8), cm_end=round(cm_end, digits=8))
+
+lr_cruc_Chrom1<- lr_cruc_Chrom1 %>% mutate(cm_start=round(cm_start, digits=8), cm_end=round(cm_end, digits=8))
+lr_losguajes_Chrom1<- lr_losguajes_Chrom1 %>% mutate(cm_start=round(cm_start, digits=8), cm_end=round(cm_end, digits=8))
+All_LR_Distance_Between_1000BPWindow_and_Gene_CM_Chrom1.txt<- All_LR_Distance_Between_1000BPWindow_and_Gene_CM_Chrom1.txt %>% mutate(cm_start=round(cm_start, digits=8), cm_end=round(cm_end, digits=8))
+```
+
+Merging Bedtools file with Land Race data
+```{r}
+LR_Palmar_Chico_PI_Distance<- full_join(All_LR_Distance_Between_1000BPWindow_and_Gene_CM_Chrom1.txt,lr_palmar_Chrom1)
+LR_San_Lorenzo_PI_Distance<- full_join(All_LR_Distance_Between_1000BPWindow_and_Gene_CM_Chrom1.txt,lr_sanlo_Chrom1)
+
+LR_Los_Guajes_PI_Distance<- full_join(All_LR_Distance_Between_1000BPWindow_and_Gene_CM_Chrom1.txt,lr_losguajes_Chrom1)
+LR_Amatlan_De_Casas_PI_Distance<- full_join(All_LR_Distance_Between_1000BPWindow_and_Gene_CM_Chrom1.txt,lr_amatlan_Chrom1)
+LR_Crucero_Lagunitas_PI_Distance<- full_join(All_LR_Distance_Between_1000BPWindow_and_Gene_CM_Chrom1.txt,lr_cruc_Chrom1)
+
+```
+
+Removing NA and filtering data so that only distance values below .01 are shown
+```{r}
+LR_Palmar_Chico_PI_Distance<-drop_na(LR_Palmar_Chico_PI_Distance) %>% filter(Distance<.01)
+LR_San_Lorenzo_PI_Distance<-drop_na(LR_San_Lorenzo_PI_Distance) %>% filter(Distance<.01)
+
+LR_Los_Guajes_PI_Distance<-drop_na(LR_Los_Guajes_PI_Distance) %>% filter(Distance<.01)
+LR_Amatlan_De_Casas_PI_Distance<-drop_na(LR_Amatlan_De_Casas_PI_Distance) %>% filter(Distance<.01)
+LR_Crucero_Lagunitas_PI_Distance<-drop_na(LR_Crucero_Lagunitas_PI_Distance) %>% filter(Distance<.01)
+```
+
+Making a cubic spline for PI vs Distance from Gene for all Land Race Populations for Chromosome 1
+```{r}
+
+smooth.spline(y=LR_Palmar_Chico_PI_Distance$PI,x=LR_Palmar_Chico_PI_Distance$Distance) %>%
+plot(col="blue",lwd=1,type="l",xlab="Distance from Gene in CM",ylab=expression(pi),cex.lab=2,cex.axis=1.5,main="LR_Palmar_Chico_Chrom_1")
+
+smooth.spline(y=LR_San_Lorenzo_PI_Distance$PI,x=LR_San_Lorenzo_PI_Distance$Distance) %>%
+plot(col="blue",lwd=1,type="l",xlab="Distance from Gene in CM",ylab=expression(pi),cex.lab=2,cex.axis=1.5,main="LR_San_Lorenzo_Chrom_1")
+
+
+
+smooth.spline(y=LR_Los_Guajes_PI_Distance$PI,x=LR_Los_Guajes_PI_Distance$Distance) %>%
+plot(col="blue",lwd=1,type="l",xlab="Distance from Gene in CM",ylab=expression(pi),cex.lab=2,cex.axis=1.5,main="LR_Los_Guajes_Chrom_1")
+
+smooth.spline(y=LR_Crucero_Lagunitas_PI_Distance$PI,x=LR_Crucero_Lagunitas_PI_Distance$Distance) %>%
+plot(col="blue",lwd=1,type="l",xlab="Distance from Gene in CM",ylab=expression(pi),cex.lab=2,cex.axis=1.5,main="LR_Crucero_Lagunitas_Chrom_1")
+
+smooth.spline(y=LR_Amatlan_De_Casas_PI_Distance$PI,x=LR_Amatlan_De_Casas_PI_Distance$Distance) %>%
+plot(col="blue",lwd=1,type="l",xlab="Distance from Gene in CM",ylab=expression(pi),cex.lab=2,cex.axis=1.5,main="LR_Amatlan_De_Casas_Chrom_1")
+
+```
+
+Putting all PI vs Distance from Gene on a single plot
+```{r}
+a<-smooth.spline(y=LR_Palmar_Chico_PI_Distance$PI,x=LR_Palmar_Chico_PI_Distance$Distance)
+b<-smooth.spline(y=LR_San_Lorenzo_PI_Distance$PI,x=LR_San_Lorenzo_PI_Distance$Distance) 
+c<-smooth.spline(y=LR_Amatlan_De_Casas_PI_Distance$PI,x=LR_Amatlan_De_Casas_PI_Distance$Distance)
+d<-smooth.spline(y=LR_Crucero_Lagunitas_PI_Distance$PI,x=LR_Crucero_Lagunitas_PI_Distance$Distance)
+e<-smooth.spline(y=LR_Los_Guajes_PI_Distance$PI,x=LR_Los_Guajes_PI_Distance$Distance)
+
+plot(a, col="blue",lwd=1,type="l",xlim=c(0, .01),ylim=c(0,.02),xlab="Distance from Gene in CM",ylab=expression(pi),cex.lab=2,cex.axis=1.5,main="PI vs Distance for Land Race for Chromosome 1")
+lines(b,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="red" )
+lines(c,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="green" )
+lines(d,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="orange" )
+lines(e,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="yellow" )
+
+legend(.002,.02, legend=c("Palmar Chico", "San Lorenzo", "Amatlan de Casas", "Crucero Lagunitas", "Los Guajes"),
+       col=c("blue", "red", "green","orange","yellow"), lty=1, cex=0.8)
+
+```
+
+Get any possible Window positions from any population  
+```{r}
+Windows <- data.frame(BIN_START=seq(1,max(allpops_Chrom1$BIN_START),1000),
+                 BIN_END=seq(1000,max(allpops_Chrom1$BIN_START)+1000,1000),
+                 chrom="chr1")
+                 
+Windows<-Windows[c("chrom", "BIN_START", "BIN_END")]
+
+```
+Get cm positions for windows in each pop; remove windows with NA (usually because before start of genetic map)
+```{r}
+Windows<-mutate(Windows,cm_start=approx(x=gen_map$pos,y=gen_map$cm,xout=Windows$BIN_START)$y) %>%
+  mutate(cm_end=approx(x=gen_map$pos,y=gen_map$cm,xout=Windows$BIN_END)$y) %>%
+  mutate(rec=cm_end-cm_start) %>% filter(rec!="NA")
+```
+
+Cleaning up data, removing columns, renaming certain columns so they can be read by bedtools, converting CM to integers by multiplying 1000000000 and removing decimal places
+```{r}
+All_POPS_CM_WINDOW_CHROM_1<-Windows %>% select(-BIN_START, -BIN_END,  -rec) %>% mutate(cm_start=cm_start*1000000000, cm_end=cm_end*1000000000) %>% mutate (cm_start=round(cm_start, digits=0), cm_end=round(cm_end, digits=0)) %>% rename( chromStart=cm_start, chromEnd=cm_end)
+```
+
+

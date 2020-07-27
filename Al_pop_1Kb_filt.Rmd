@@ -1,0 +1,188 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(data.table)
+library(tidyverse)
+library(cowplot)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+```{r}
+
+```
+
+
+Get Data, remove row numbers and N variants (because basically same as N_SNPS), and add new variable binbp for middle of the window
+```{r}
+Allpopdata<-fread("~/Desktop/All_pop_1Kb_filt.csv") %>% 
+  
+  mutate(binbp=BIN_START+(BIN_END-BIN_START)/2)
+```
+
+```{r}
+Allpopdata
+```
+
+
+```{r}
+popLR_Amatlan_de_Canas_1<-filter(Allpopdata,pop=="LR_Amatlan_de_Canas",CHROM==1)
+```
+
+
+```{r}
+smoothpi<-smooth.spline(y=popLR_Amatlan_de_Canas_1$PI,x=popLR_Amatlan_de_Canas_1$binbp/1E6)
+```
+
+```{r}
+plot(smoothpi,col="blue",lwd=3,type="l",xlab="Mb",ylab=expression(pi),cex.lab=2,cex.axis=1.5)
+```
+
+
+
+
+
+
+```{r}
+filter(Allpopdata,pop=="LR_Amatlan_de_Canas") %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(col="blue", alpha=0.1)+facet_wrap(~CHROM,scales="free")
+
+```
+
+
+```{r}
+filter(Allpopdata,pop=="LR_Amatlan_de_Canas",CHROM==1,NBR_BP>200)
+```
+
+
+```{r}
+
+
+
+filter(Allpopdata,PI>0.1) 
+
+
+```
+
+
+```{r}
+filter(Allpopdata,pop=="LR_Amatlan_de_Canas",CHROM==1,PI>.1)
+```
+
+
+
+```{r}
+filter(Allpopdata,pop=="LR_Los_Guajes", CHROM=="3") 
+
+```
+
+```{r}
+hist(Allpopdata$NBR_BP,main="Histogram of NBR_BP", 
+     xlab="NBR_BP", 
+     border="black", 
+     col=" green",
+     xlim=c(1,1000),
+     las=1, 
+     breaks=(200), probability = TRUE) 
+lines(density(Allpopdata$NBR_BP))
+     
+```
+
+
+```{r}
+summary(Allpopdata)
+```
+    
+
+
+```{r}
+filter(Allpopdata,pop=="LR_Amatlan_de_Canas",CHROM==2) %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+
+```
+
+```{r}
+filter(Allpopdata,pop=="Teo_El_Rodeo") %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+
+```
+
+
+```{r}
+filter(Allpopdata,pop=="Teo_Los_Guajes") %>% summary()
+
+```
+
+```{r}
+filter(Allpopdata,pop=="Teo_Crucero_Lagunitas") %>% summary()
+```
+
+```{r}
+filter(Allpopdata,pop=="Teo_El_Rodeo") %>% summary()
+```
+
+```{r}
+filter(Allpopdata,pop=="Teo_Amatlan_de_Canas") %>% summary()
+```
+
+```{r}
+filter(Allpopdata,pop=="Teo_San_Lorenzo") %>% summary()
+```
+
+```{r}
+filter(Allpopdata,pop=="Teo_Palmar_Chico") %>% summary()
+```
+
+```{r}
+filter(Allpopdata,pop=="LR_Crucero_Lagunitas") %>% summary()
+```
+
+```{r}
+filter(Allpopdata,pop=="LR_Los_Guajes") %>% summary()
+```
+
+```{r}
+filter(Allpopdata,pop=="LR_Amatlan_de_Canas") %>% summary()
+```
+
+```{r}
+filter(Allpopdata,pop=="LR_San_Lorenzo") %>% summary()
+```
+
+```{r}
+filter(Allpopdata,pop=="Palmar_Chico") %>% summary()
+```
+
+```{r}
+filter(Allpopdata) %>% summary()
+```
+
+```{r}
+approx()
+```
+
+
+scp -P 2022 smcginty@farm.cse.ucdavis.edu:/home/smcginty/LR_Allpop_pi_TjD.csv ./
+scp -P 2022 smcginty@farm.cse.ucdavis.edu:/group/jrigrp/Share/annotations/genetic_map/ogut2015/cleaned_v4_version
+
+
+
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+

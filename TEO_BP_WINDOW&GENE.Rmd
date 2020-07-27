@@ -1,0 +1,124 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+bye e
+```{r}
+options(scipen = 999)
+```
+
+```{r}
+read.delim("~/Downloads/Zea_mays.B73_RefGen_v4.44.chromosome.1.gff3", header=F, comment.char="#") -> gff
+```
+
+
+```{r}
+Gene_positionbed1<-filter(gff, V3=="gene") %>% select(-V2,-V3,-V6,-V7,-V8,-V9)
+Gene_positionbed1$V1<-"chr1"
+```
+
+```{r}
+Gene_positionbed11<-Gene_positionbed1%>% rename(chrom=V1, chromStart=V4, chromEnd=V5)
+```
+
+
+```{r}
+teo_palmarbed1<-filter(allpops,pop=="Teo_Palmar_Chico") %>% select (-PI, -NBR_BP, -pop, -N_VARIANTS)
+``` 
+
+```{r}
+
+teo_palmarbed1$CHROM<-"chr1" 
+
+```
+
+```{r}
+teo_palmarbed11<-teo_palmarbed1 %>% rename(chrom=CHROM, chromStart=BIN_START, chromEnd=BIN_END)
+```
+
+
+```{r}
+
+
+```
+
+
+
+
+
+
+```{r}
+teo_palmarbed11
+```
+
+
+
+
+
+
+
+```{r}
+TEO_BP_GENE<-Gene_positionbed11
+```
+
+```{r}
+TEO_BP_WINDOW<-teo_palmarbed11
+```
+
+
+
+```{r}
+write.table(TEO_BP_GENE, file="TEO_BP_GENE.txt",row.names=F,quote=F,sep="\t")
+```
+
+
+```{r}
+write.table(TEO_BP_WINDOW, file="TEO_BP_WINDOW.txt",row.names=F,quote=F,sep="\t" )
+
+
+```
+
+```{r}
+write.table
+
+
+```
+
+
+```{r}
+view(teo_palmarbed11)
+```
+
+
+
+view(teo_palmarbed11.txt)
+```{r}
+teodata<-fread("~/Downloads/teo_palmarbed11.txt")
+
+```
+```{r}
+
+
+```
+
+```{r}
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

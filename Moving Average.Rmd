@@ -1,0 +1,35 @@
+
+```{r}
+library(data.table)
+library(tidyverse)
+library(cowplot)
+library(stats)
+winsize=100 #winsize
+PC_Sites_PI<-fread("~/Downloads/PC.sites.pi")
+options(scipen = 999)  
+```
+
+```{r}
+CountPC_Sites_PI<-fread("~/Downloads/PC.sites.pi")
+ CountPC_Sites_PI<-mutate(CountPC_Sites_PI,Window_Start=floor(POS/winsize)*winsize) %>% 
+  group_by(Window_Start) %>% 
+  count(Window_Start) 
+```
+
+```{r}
+
+PC_Sites_PI_100bp<-mutate(PC_Sites_PI,Window_Start=floor(POS/winsize)*winsize) %>% 
+  group_by(Window_Start) %>% 
+  summarize(pi=mean(PI)) 
+
+PC_Sites_PI_100bp<-mutate(PC_Sites_PI_100bp,Window_Stop=Window_Start+100,NBR_BP=CountPC_Sites_PI$n)
+PC_Sites_PI_100bp<-PC_Sites_PI_100bp[c("Window_Start", "Window_Stop", "pi", "NBR_BP")]
+```
+
+```{r}
+FiltPC_Sites_PI_100bp<-filter(PC_Sites_PI_100bp, NBR_BP>50)
+
+```
+
+
+

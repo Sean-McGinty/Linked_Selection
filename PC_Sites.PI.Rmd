@@ -1,0 +1,23 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+
+library(data.table)
+library(tidyverse)
+library(cowplot)
+
+
+```
+
+
+```{r}
+PC_Sites_PI<-fread("~/Background_Selection/PC.sites.pi")
+```
+
+```{r}
+view(PC_Sites_PI)
+```
+

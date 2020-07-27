@@ -1,0 +1,308 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+library(data.table)
+library(tidyverse)
+library(cowplot)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+
+Get Data, remove row numbers and N variants (because basically same as N_SNPS), and add new variable binbp for middle of the window
+```{r}
+sdata<-fread("~/Desktop/Teo_Allpop_pi_TjD.csv") %>% 
+  select(-V1,-N_VARIANTS) %>%
+  mutate(binbp=BIN_START+(BIN_END-BIN_START)/2)
+```
+
+```{r}
+sdata
+```
+
+
+```{r}
+pop1_10<-filter(sdata,pop=="pop_1",CHROM==10)
+```
+
+
+```{r}
+smoothpi<-smooth.spline(y=pop1_10$PI,x=pop1_10$binbp/1E6)
+```
+
+```{r}
+plot(smoothpi,col="blue",lwd=3,type="l",xlab="Mb",ylab=expression(pi),cex.lab=2,cex.axis=1.5)
+```
+
+
+
+
+
+
+```{r}
+filter(sdata,pop=="pop_1") %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+
+```
+
+```{r}
+filter(sdata,PI>0.1) 
+
+
+```
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==10,PI>.1)
+```
+
+
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==10,NBR_BP>200,N_SNPS>16)
+
+```
+
+Making a new graph with NBR_BP>200,N_SNPS>16 (MAXIMUM NBR_BP for PI>.1 is good data, will make cutoff just below this point)
+
+```{r}
+pop1_10<-filter(sdata,pop=="pop_1",CHROM==10,NBR_BP>287,N_SNPS>109)
+
+
+
+```
+
+```{r}
+smoothpi<-smooth.spline(y=pop1_10$PI,x=pop1_10$binbp/1E6)
+
+```
+
+```{r}
+plot(smoothpi,col="blue",lwd=3,type="l",xlab="Mb",ylab=expression(pi),cex.lab=2,cex.axis=1.5)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==7) %>% summary() 
+```
+
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==10) %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+Making a new graph with NBR_BP>200,N_SNPS>16 (MAXIMUM NBR_BP for PI>.1 is good data, will make cutoff just below this point)
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==10,NBR_BP>200,N_SNPS>109) %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+
+```{r}
+filter(sdata,pop=="pop_1") %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+
+
+
+
+```{r}
+filter(sdata,pop=="pop_1",NBR_BP>200,N_SNPS>109) %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==10) %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+
+
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==10,NBR_BP>200,N_SNPS>109) %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==9) %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+
+
+
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==9,NBR_BP>200,N_SNPS>100) %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==8) %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==8,NBR_BP>200,N_SNPS>109) %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==7) %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==7,NBR_BP>200,N_SNPS>109) %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==6) %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==6,NBR_BP>200,N_SNPS>109) %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==5) %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==5,NBR_BP>200,N_SNPS>109) %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==4) %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==4,NBR_BP>200,N_SNPS>109) %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==3) %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==3,NBR_BP>200,N_SNPS>109) %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==2) %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==2,NBR_BP>200,N_SNPS>109) %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==1) %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==1) %>% summary() 
+```
+
+
+```{r}
+filter(sdata,pop=="pop_1",CHROM==1,NBR_BP>174,N_SNPS>15) %>% 
+  ggplot(aes(x=BIN_START/1E6,y=PI))+
+  geom_point(color="black", alpha=0.1)+facet_wrap(~CHROM,scales="free")
+```
+
+
+```{r}
+pop1_9<-filter(sdata,pop=="pop_1",CHROM==9)
+```
+
+```{r}
+hist(pop1_9$NBR_BP,main="Histogram of NBR_BP", 
+     xlab="NBR_BP", 
+     border="black", 
+     col="green",
+     xlim=c(1,5000),
+     las=1, 
+     breaks=(200), probability = TRUE
+    ) 
+lines(density(pop1_9$NBR_BP))
+    
+```
+
+```{r}
+hist(sdata$NBR_BP,main="Histogram of NBR_BP", 
+     xlab="NBR_BP", 
+     border="black", 
+     col="green",
+     xlim=c(1,5000),
+     las=1, 
+     breaks=(200), probability = TRUE) 
+lines(density(pop1_9$NBR_BP))
+     
+
+
+```
+
+```{r}
+filter(sdata)
+```
+
+```{r}
+approx()
+```
+
+```
+
+
