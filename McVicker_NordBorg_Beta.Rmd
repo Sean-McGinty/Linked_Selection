@@ -62,6 +62,15 @@ Variant_Allele_Frequency$QFreq<-substring(Variant_Allele_Frequency$Q,3,11)
 head(Variant_Allele_Frequency)
 ```
 
+Exon sites
+```{r}
+Exons=fread("~/Downloads/Zea_mays.B73_RefGen_v4.47.chromosome.1.gff3.BED") %>% filter(V8=="exon") %>% select(V2,V3,V8) %>% rename("Start"=V2,"End"=V3,"Label"=V8)
+
+Exonic_Sites<-unlist(lapply(1:(length(Exons$Start)), function(i) seq(Exons$Start[i],Exons$End[i])))
+length(Exonic_Sites)/length(Zerofold_Positions$POS)
+```
+
+
 
 0-fold and 4-fold positions in genome for chromosome 1. **Which version (V4)?**
 ```{r}
@@ -139,6 +148,23 @@ mut_q<-Zerofold_Positions$QFreq %>% as.numeric()
 length(mut_q)
 ```
 
+McVicker using mclapply
+```{r}
+beta<-function(i){
+  musites<-subset(mut_pos,mut_pos>=window_pi$bstart_cm[i] & mut_pos<=window_pi$bend_cm[i])/100
+  if(length(musites)==0){return(NA)}
+  else{
+    r=abs(musites-window_pi$mid_cm[i]/100)
+    return( exp(-1*sum(unlist(sapply(1:(length(r)),function(i) integrate(function(x){mu*dtexp(x,a=1E-5,b=1,rate=1000)/(x*(1+(1-x)*r[i]/x)^2)},0.001,1))[1,]))) ) }
+  
+}
+BETA=mclapply(1:length(window_pi$mid_cm),beta)
+```
+
+
+
+
+
 McVicker  * r^2 of 6% with previous genetic map*
 ```{r}
 BETA<-vector() #empty vector for BETA
@@ -162,6 +188,29 @@ for(i in 1:length(window_pi$mid_cm)){
   }
 }
 ```
+New McVicker...Same Equation but possibly faster
+```{r}
+window_pi
+Zerofold_Positions
+beta_practice_win<-group_by(Zerofold_Positions,win=cut(POS, 
+                                        breaks=seq(0, ceiling(max(Zerofold_Positions$POS)/beta_winsize)*beta_winsize, by=beta_winsize),
+                                        labels=seq(1, ceiling(max(Zerofold_Positions$POS)/beta_winsize)*beta_winsize, by=beta_winsize))) %>%
+  summarize(mut_sites=list(POS),nbr=n()) %>%
+  mutate(start=seq(1,max(Zerofold_Positions$POS),beta_winsize),end=seq(beta_winsize,max(Zerofold_Positions$POS)+beta_winsize,beta_winsize),mid=((start+end)/2))
+
+for(i in 1:length(beta_practice_win$end)){ 
+  beta_practice_win$recs[i]<-(list(abs(beta_practice_win$mut_sites[[i]] - beta_practice_win$mid[i])))
+}
+
+prac_beta=vector()
+for(i in 1:length(beta_practice_win$end)){ 
+  
+  r=beta_practice_win$recs[[i]]
+  beta_practice_win$beta[i]=exp(-1*sum(unlist(sapply(1:(length(r)),function(i) integrate(function(x){mu*dtexp(x,a=1E-5,b=1,rate=1000)/(x*(1+(1-x)*r[i]/x)^2)},0.001,1))[1,]))) }
+```
+
+
+
 
 Nordborg Beta $\beta=e^{-\sum_i\bigg(\sum_d q_i/\bigg(1+\frac{r_i(1-t_{id})}{t_{id}}\bigg)^2P(t_{id})\bigg)}$
 ```{r}
@@ -198,6 +247,8 @@ plot(smooth.spline(BETA),col="blue",lwd=1,type="l")
 length(BETA)
 length(PI)
 length(window_pi$mid)
+#save(BETA, file = "BETA.txt")
+load("BETA.txt")
 ```
 
 
