@@ -1,0 +1,120 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+library(data.table)
+library(tidyverse)
+library(cowplot)
+library(TruncatedDistributions)
+library(parallel)
+options(scipen = 999)
+```
+
+```{r}
+pi_winsize=1000
+mu=1E-7 
+```
+Get new genetic map for chromosome 1 bp_pos, cm/Mb, and cM *Genetic Map 2*
+```{r}
+gen_map<-fread("~/Background_Selection/ogut.chr1.txt") %>%
+   rename(pos=V1, cm=V3) %>% 
+   mutate(cm=cm+abs(min(cm))) 
+```
+
+CM Function
+```{r}
+CM = function(data){mutate(data,
+                  cm_start = approx(x=gen_map$pos,y=gen_map$cm,xout=data$BIN_START)$y,
+                  cm_end   = approx(x=gen_map$pos,y=gen_map$cm,xout=data$BIN_END)$y,
+                  rec      = cm_end-cm_start,
+                  morgans  = rec/100) %>% 
+                  na.omit()}
+```
+
+Download all our Data for chromosome 1
+```{r}
+allpops_Chrom1<-fread("~/Background_Selection/All_pop_1Kb_filt.csv") %>% select(CHROM,pop,BIN_START,BIN_END,PI,NBR_BP) %>% filter(CHROM==1,NBR_BP>300)
+
+Teo_Palmar_PI    <-filter(allpops_Chrom1,pop=="Teo_Palmar_Chico")      %>% CM()
+Teo_SanLo_PI     <-filter(allpops_Chrom1,pop=="Teo_San_Lorenzo")       %>% CM()
+Teo_Amatlan_PI   <-filter(allpops_Chrom1,pop=="Teo_Amatlan_de_Canas")  %>% CM()
+Teo_ElRodeo_PI   <-filter(allpops_Chrom1,pop=="Teo_El_Rodeo")          %>% CM()
+Teo_Crucero_PI   <-filter(allpops_Chrom1,pop=="Teo_Crucero_Lagunitas") %>% CM() 
+Teo_LosGuajes_PI <-filter(allpops_Chrom1,pop=="Teo_Los_Guajes")        %>% CM()
+```
+
+Teo Palmar Windows
+```{r}
+TEO_PALMAR_WINDOWS=data.frame(chrom="chr1",start=seq(6001,306921001,1000),stop=seq(7000,306922000,1000))
+
+#write.table(TEO_PALMAR_WINDOWS,"TEO_PALMAR_WINDOWS.txt",row.names=F,quote=F,sep="\t")
+```
+Exon sites
+```{r}
+Exons=fread("~/Downloads/Zea_mays.B73_RefGen_v4.47.chromosome.1.gff3.BED") %>% filter(V8=="exon") %>% select(V1,V2,V3) %>% rename("chrom"=V1,"Start"=V2,"End"=V3) %>% distinct()
+Exons$chrom="chr1"
+Exonic_Sites=data_frame(POS=unlist(lapply(1:(length(Exons$Start)), function(i) seq(Exons$Start[i],Exons$End[i]))))
+#Exonic_Sites$POS<-unlist(lapply(1:(length(Exons$Start)), function(i) seq(Exons$Start[i],Exons$End[i])))
+#Exonic_Sites$PI<-sample(1:10,length(Exonic_Sites$POS),replace = F)
+#write.table(Exons,"Exons.txt",row.names=F,quote=F,sep="\t")
+
+```
+
+Used to get Exonic sites Per Window
+```{BASH}
+#bedtools intersect -b Exons.txt -a TEO_PALMAR_WINDOWS.txt -wao 
+```
+
+```{r}
+Exonic_Sites=fread("~/Linked_Selection/Exonic_sites_Per_Window.txt") %>% select(V2,V3,V7) %>% rename("BIN_START"=V2,"BIN_STOP"=V3,"nbr_exonic_sites"=V7)
+```
+Function that uses exonic sites, morgans, and mutation rate to calculate estimate beta
+```{r}
+BETA=function(data){full_join(data,Exonic_Sites) %>% 
+       na.omit() %>%
+       select(PI,nbr_exonic_sites,morgans,BIN_START,BIN_END) %>%
+       mutate(Beta_Estimate=exp(-(mu*nbr_exonic_sites)/morgans) ) %>%
+       filter(PI<.04)}
+```
+
+
+Merge pi with exonic sites data
+```{r}
+Teo_Palmar_PI_Exonic    <- BETA(Teo_Palmar_PI)
+Teo_SanLo_PI_Exonic     <- BETA(Teo_SanLo_PI)
+Teo_Amatlan_PI_Exonic   <- BETA(Teo_Amatlan_PI)
+Teo_ElRodeo_PI_Exonic   <- BETA(Teo_ElRodeo_PI)
+Teo_Crucero_PI_Exonic   <- BETA(Teo_Crucero_PI)
+Teo_LosGuajes_PI_Exonic <- BETA(Teo_LosGuajes_PI)
+
+a<-smooth.spline(x=Teo_Palmar_PI_Exonic$PI,y=Teo_Palmar_PI_Exonic$Beta_Estimate)
+b<-smooth.spline(x=Teo_SanLo_PI_Exonic$PI,y=Teo_SanLo_PI_Exonic$Beta_Estimate)
+c<-smooth.spline(x=Teo_Amatlan_PI_Exonic$PI,y=Teo_Amatlan_PI_Exonic$Beta_Estimate)
+d<-smooth.spline(x=Teo_ElRodeo_PI_Exonic$PI,y=Teo_ElRodeo_PI_Exonic$Beta_Estimate)
+e<-smooth.spline(x=Teo_Crucero_PI_Exonic$PI,y=Teo_Crucero_PI_Exonic$Beta_Estimate)
+f<-smooth.spline(x=Teo_LosGuajes_PI_Exonic$PI,y=Teo_LosGuajes_PI_Exonic$Beta_Estimate)
+
+plot(a, col="blue",lwd=1,type="l",xlab=expression(pi),ylab=expression(beta),main="PI vs BETA")
+lines(b,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="red" )
+lines(c,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="green" )
+lines(d,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="orange" )
+lines(e,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="yellow" )
+lines(f,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="purple" )
+legend(.025,.6, legend=c("Palmar Chico", "San Lorenzo", "Amatlan de Casas", "El Rodeo", "Crucero Lagunitas", "Los Guajes"),
+       col=c("blue", "red", "green","orange","yellow","purple"), lty=1, cex=0.8)
+
+```
+
+```{r}
+Teo_Palmar_PI_Exonic<- BETA(Teo_Palmar_PI)
+
+ggplot(data=Teo_Palmar_PI_Exonic,aes(x=PI,y=Beta_Estimate))+geom_point(alpha=.9)
+summary(lm(PI~exp(Beta_Estimate),data=Teo_Palmar_PI_Exonic))
+plot(smooth.spline(x=Teo_Palmar_PI_Exonic$BIN_START,y=Teo_Palmar_PI_Exonic$Beta_Estimate),col="blue",lwd=4,type="l")
+plot(smooth.spline(x=Teo_Palmar_PI_Exonic$PI,y=Teo_Palmar_PI_Exonic$Beta_Estimate),col="blue",lwd=4,type="l",xlab=expression(pi),ylab=expression(beta),main="PI vs BETA")
+```
+
+
+
+
