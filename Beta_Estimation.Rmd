@@ -15,16 +15,25 @@ options(scipen = 999)
 pi_winsize=1000
 mu=1E-7 
 ```
-Get new genetic map for chromosome 1 bp_pos, cm/Mb, and cM *Genetic Map 2*
+
+Get new genetic map for chromosome 1 and 2 bp_pos, cm/Mb, and cM 
 ```{r}
-gen_map<-fread("~/Background_Selection/ogut.chr1.txt") %>%
+gen_map_chr1<-fread("~/Background_Selection/ogut.chr1.txt") %>%
    rename(pos=V1, cm=V3) %>% 
    mutate(cm=cm+abs(min(cm))) 
+
+gen_map_chr2<-fread("~/Background_Selection/ogut.chr2.txt") %>%
+   rename(pos=V1, cm=V3) %>% 
+   mutate(cm=cm+abs(min(cm)))
+
+gen_map_chr3<-fread("~/Background_Selection/ogut.chr3.txt") %>%
+   rename(pos=V1, cm=V3) %>% 
+   mutate(cm=cm+abs(min(cm)))
 ```
 
 CM Function
 ```{r}
-CM = function(data){mutate(data,
+CM = function(data,gen_map){mutate(data,
                   cm_start = approx(x=gen_map$pos,y=gen_map$cm,xout=data$BIN_START)$y,
                   cm_end   = approx(x=gen_map$pos,y=gen_map$cm,xout=data$BIN_END)$y,
                   rec      = cm_end-cm_start,
@@ -32,46 +41,102 @@ CM = function(data){mutate(data,
                   na.omit()}
 ```
 
-Download all our Data for chromosome 1
+Download Data for chromosome 1
 ```{r}
 allpops_Chrom1<-fread("~/Background_Selection/All_pop_1Kb_filt.csv") %>% select(CHROM,pop,BIN_START,BIN_END,PI,NBR_BP) %>% filter(CHROM==1,NBR_BP>300)
-
-Teo_Palmar_PI    <-filter(allpops_Chrom1,pop=="Teo_Palmar_Chico")      %>% CM()
-Teo_SanLo_PI     <-filter(allpops_Chrom1,pop=="Teo_San_Lorenzo")       %>% CM()
-Teo_Amatlan_PI   <-filter(allpops_Chrom1,pop=="Teo_Amatlan_de_Canas")  %>% CM()
-Teo_ElRodeo_PI   <-filter(allpops_Chrom1,pop=="Teo_El_Rodeo")          %>% CM()
-Teo_Crucero_PI   <-filter(allpops_Chrom1,pop=="Teo_Crucero_Lagunitas") %>% CM() 
-Teo_LosGuajes_PI <-filter(allpops_Chrom1,pop=="Teo_Los_Guajes")        %>% CM()
+ Teo_Palmar_PI_chr1   <-filter(allpops_Chrom1,pop=="Teo_Palmar_Chico")      %>% CM(gen_map_chr1)
+Teo_SanLo_PI_chr1     <-filter(allpops_Chrom1,pop=="Teo_San_Lorenzo")       %>% CM(gen_map_chr1)
+Teo_Amatlan_PI_chr1   <-filter(allpops_Chrom1,pop=="Teo_Amatlan_de_Canas")  %>% CM(gen_map_chr1)
+Teo_ElRodeo_PI_chr1   <-filter(allpops_Chrom1,pop=="Teo_El_Rodeo")          %>% CM(gen_map_chr1)
+Teo_Crucero_PI_chr1   <-filter(allpops_Chrom1,pop=="Teo_Crucero_Lagunitas") %>% CM(gen_map_chr1) 
+Teo_LosGuajes_PI_chr1 <-filter(allpops_Chrom1,pop=="Teo_Los_Guajes")        %>% CM(gen_map_chr1)
+  
+LR_Palmar_PI_chr1       <-filter(allpops_Chrom1,pop=="LR_Palmar_Chico")      %>% CM(gen_map_chr1)
+LR_SanLo_PI_chr1        <-filter(allpops_Chrom1,pop=="LR_San_Lorenzo")       %>% CM(gen_map_chr1)
+LR_Amatlan_PI_chr1      <-filter(allpops_Chrom1,pop=="LR_Amatlan_de_Canas")  %>% CM(gen_map_chr1)
+LR_Crucero_PI_chr1      <-filter(allpops_Chrom1,pop=="LR_Crucero_Lagunitas") %>% CM(gen_map_chr1) 
+LR_LosGuajes_PI_chr1    <-filter(allpops_Chrom1,pop=="LR_Los_Guajes")        %>% CM(gen_map_chr1)
 ```
 
-Teo Palmar Windows
+Download Data for chromosome 2
 ```{r}
-TEO_PALMAR_WINDOWS=data.frame(chrom="chr1",start=seq(6001,306921001,1000),stop=seq(7000,306922000,1000))
-
-#write.table(TEO_PALMAR_WINDOWS,"TEO_PALMAR_WINDOWS.txt",row.names=F,quote=F,sep="\t")
+allpops_Chrom2<-fread("~/Background_Selection/All_pop_1Kb_filt.csv") %>% select(CHROM,pop,BIN_START,BIN_END,PI,NBR_BP) %>% filter(CHROM==2,NBR_BP>300)
+ Teo_Palmar_PI_chr2   <-filter(allpops_Chrom2,pop=="Teo_Palmar_Chico")      %>% CM(gen_map_chr2)
+Teo_SanLo_PI_chr2     <-filter(allpops_Chrom2,pop=="Teo_San_Lorenzo")       %>% CM(gen_map_chr2)
+Teo_Amatlan_PI_chr2   <-filter(allpops_Chrom2,pop=="Teo_Amatlan_de_Canas")  %>% CM(gen_map_chr2)
+Teo_ElRodeo_PI_chr2   <-filter(allpops_Chrom2,pop=="Teo_El_Rodeo")          %>% CM(gen_map_chr2)
+Teo_Crucero_PI_chr2   <-filter(allpops_Chrom2,pop=="Teo_Crucero_Lagunitas") %>% CM(gen_map_chr2) 
+Teo_LosGuajes_PI_chr2 <-filter(allpops_Chrom2,pop=="Teo_Los_Guajes")        %>% CM(gen_map_chr2)
+  
+LR_Palmar_PI_chr2       <-filter(allpops_Chrom2,pop=="LR_Palmar_Chico")      %>% CM(gen_map_chr2)
+LR_SanLo_PI_chr2        <-filter(allpops_Chrom2,pop=="LR_San_Lorenzo")       %>% CM(gen_map_chr2)
+LR_Amatlan_PI_chr2      <-filter(allpops_Chrom2,pop=="LR_Amatlan_de_Canas")  %>% CM(gen_map_chr2)
+LR_Crucero_PI_chr2      <-filter(allpops_Chrom2,pop=="LR_Crucero_Lagunitas") %>% CM(gen_map_chr2) 
+LR_LosGuajes_PI_chr2    <-filter(allpops_Chrom2,pop=="LR_Los_Guajes")        %>% CM(gen_map_chr2)
 ```
+
+Download Data for chromosome 3 *missing for everything but Teo El Rodeo*
+```{r}
+
+allpops_Chrom3<-fread("~/Background_Selection/All_pop_1Kb_filt.csv") %>% select(CHROM,pop,BIN_START,BIN_END,PI,NBR_BP) %>% filter(CHROM==3,NBR_BP>300)
+Teo_Palmar_PI_chr3   <-filter(allpops_Chrom3,pop=="Teo_Palmar_Chico")      %>% CM(gen_map_chr3)
+Teo_SanLo_PI_chr3     <-filter(allpops_Chrom3,pop=="Teo_San_Lorenzo")       %>% CM(gen_map_chr3)
+Teo_Amatlan_PI_chr3   <-filter(allpops_Chrom3,pop=="Teo_Amatlan_de_Canas")  %>% CM(gen_map_chr3)
+Teo_ElRodeo_PI_chr3   <-filter(allpops_Chrom3,pop=="Teo_El_Rodeo")          %>% CM(gen_map_chr3)
+Teo_Crucero_PI_chr3   <-filter(allpops_Chrom3,pop=="Teo_Crucero_Lagunitas") %>% CM(gen_map_chr3) 
+Teo_LosGuajes_PI_chr3 <-filter(allpops_Chrom3,pop=="Teo_Los_Guajes")        %>% CM(gen_map_chr3)
+  
+LR_Palmar_PI_chr3       <-filter(allpops_Chrom3,pop=="LR_Palmar_Chico")      %>% CM(gen_map_chr3)
+LR_SanLo_PI_chr3        <-filter(allpops_Chrom3,pop=="LR_San_Lorenzo")       %>% CM(gen_map_chr3)
+LR_Amatlan_PI_chr3      <-filter(allpops_Chrom3,pop=="LR_Amatlan_de_Canas")  %>% CM(gen_map_chr3)
+LR_Crucero_PI_chr3      <-filter(allpops_Chrom3,pop=="LR_Crucero_Lagunitas") %>% CM(gen_map_chr3) 
+LR_LosGuajes_PI_chr3    <-filter(allpops_Chrom3,pop=="LR_Los_Guajes")        %>% CM(gen_map_chr3)
+```
+
+Windows for all Maize
+```{r}
+MAIZE_WINDOWS_chr1=data.frame(chrom="chr1",start=seq(1,306921001,1000),stop=seq(1000,306922000,1000))
+MAIZE_WINDOWS_chr2=data.frame(chrom="chr2",start=seq(1,306921001,1000),stop=seq(1000,306922000,1000))
+MAIZE_WINDOWS_chr3=data.frame(chrom="chr3",start=seq(1,306921001,1000),stop=seq(1000,306922000,1000))
+#write.table(MAIZE_WINDOWS_chr1,"MAIZE_WINDOWS_chr1.txt",row.names=F,quote=F,sep="\t")
+#write.table(MAIZE_WINDOWS_chr2,"MAIZE_WINDOWS_chr2.txt",row.names=F,quote=F,sep="\t")
+#write.table(MAIZE_WINDOWS_chr3,"MAIZE_WINDOWS_chr3.txt",row.names=F,quote=F,sep="\t")
+```
+
 Exon sites
 ```{r}
-Exons=fread("~/Downloads/Zea_mays.B73_RefGen_v4.47.chromosome.1.gff3.BED") %>% filter(V8=="exon") %>% select(V1,V2,V3) %>% rename("chrom"=V1,"Start"=V2,"End"=V3) %>% distinct()
-Exons$chrom="chr1"
-Exonic_Sites=data_frame(POS=unlist(lapply(1:(length(Exons$Start)), function(i) seq(Exons$Start[i],Exons$End[i]))))
-#Exonic_Sites$POS<-unlist(lapply(1:(length(Exons$Start)), function(i) seq(Exons$Start[i],Exons$End[i])))
-#Exonic_Sites$PI<-sample(1:10,length(Exonic_Sites$POS),replace = F)
-#write.table(Exons,"Exons.txt",row.names=F,quote=F,sep="\t")
+Exons_chr1=fread("~/Downloads/Zea_mays.B73_RefGen_v4.47.chromosome.1.gff3.BED") %>% filter(V8=="exon") %>% select(V1,V2,V3) %>% rename("chrom"=V1,"Start"=V2,"End"=V3) %>% distinct()
+Exons_chr1$chrom="chr1"
 
+
+Exons_chr2=fread("~/Background_Selection/Zea_mays.B73_RefGen_v4.44.chromosome.2.BED") %>% filter(V8=="exon") %>% select(V1,V2,V3) %>% rename("chrom"=V1,"Start"=V2,"End"=V3) %>% distinct()
+Exons_chr2$chrom="chr2"
+
+Exons_chr3=fread("~/Background_Selection/Zea_mays.B73_RefGen_v4.47.chromosome.3.BED") %>% filter(V8=="exon") %>% select(V1,V2,V3) %>% rename("chrom"=V1,"Start"=V2,"End"=V3) %>% distinct()
+Exons_chr3$chrom="chr3"
+
+#write.table(Exons_chr1,"Exons_chr1.txt",row.names=F,quote=F,sep="\t")
+#write.table(Exons_chr2,"Exons_chr2.txt",row.names=F,quote=F,sep="\t")
+#write.table(Exons_chr3,"Exons_chr3.txt",row.names=F,quote=F,sep="\t")
 ```
 
 Used to get Exonic sites Per Window
 ```{BASH}
-#bedtools intersect -b Exons.txt -a TEO_PALMAR_WINDOWS.txt -wao 
+#bedtools intersect -b Exons_chr1.txt -a MAIZE_WINDOWS_chr1.txt -wao > Exonic_Sites_Per_Window_chr1.txt
+#bedtools intersect -b Exons_chr2.txt -a MAIZE_WINDOWS_chr2.txt -wao > Exonic_Sites_Per_Window_chr2.txt
+#bedtools intersect -b Exons_chr3.txt -a MAIZE_WINDOWS_chr3.txt -wao > Exonic_Sites_Per_Window_chr3.txt
 ```
 
 ```{r}
-Exonic_Sites=fread("~/Linked_Selection/Exonic_sites_Per_Window.txt") %>% select(V2,V3,V7) %>% rename("BIN_START"=V2,"BIN_STOP"=V3,"nbr_exonic_sites"=V7)
+Exonic_Sites_chr1=fread("~/Linked_Selection/Exonic_Sites_Per_Window_chr1.txt") %>% select(V2,V3,V7) %>% rename("BIN_START"=V2,"BIN_STOP"=V3,"nbr_exonic_sites"=V7)
+
+Exonic_Sites_chr2=fread("~/Linked_Selection/Exonic_Sites_Per_Window_chr2.txt") %>% select(V2,V3,V7) %>% rename("BIN_START"=V2,"BIN_STOP"=V3,"nbr_exonic_sites"=V7)
+
+Exonic_Sites_chr3=fread("~/Linked_Selection/Exonic_Sites_Per_Window_chr3.txt") %>% select(V2,V3,V7) %>% rename("BIN_START"=V2,"BIN_STOP"=V3,"nbr_exonic_sites"=V7)
 ```
 Function that uses exonic sites, morgans, and mutation rate to calculate estimate beta
 ```{r}
-BETA=function(data){full_join(data,Exonic_Sites) %>% 
+BETA=function(data,Exonic_Sites){full_join(data,Exonic_Sites) %>% 
        na.omit() %>%
        select(PI,nbr_exonic_sites,morgans,BIN_START,BIN_END) %>%
        mutate(Beta_Estimate=exp(-(mu*nbr_exonic_sites)/morgans) ) %>%
@@ -79,23 +144,59 @@ BETA=function(data){full_join(data,Exonic_Sites) %>%
 ```
 
 
-Merge pi with exonic sites data
+Calculating Beta using Estimate from Hudson and Kaplan
 ```{r}
-Teo_Palmar_PI_Exonic    <- BETA(Teo_Palmar_PI)
-Teo_SanLo_PI_Exonic     <- BETA(Teo_SanLo_PI)
-Teo_Amatlan_PI_Exonic   <- BETA(Teo_Amatlan_PI)
-Teo_ElRodeo_PI_Exonic   <- BETA(Teo_ElRodeo_PI)
-Teo_Crucero_PI_Exonic   <- BETA(Teo_Crucero_PI)
-Teo_LosGuajes_PI_Exonic <- BETA(Teo_LosGuajes_PI)
+Teo_Palmar_PI_Exonic_chr1    <- BETA(Teo_Palmar_PI_chr1,    Exonic_Sites_chr1)
+Teo_SanLo_PI_Exonic_chr1     <- BETA(Teo_SanLo_PI_chr1,     Exonic_Sites_chr1)
+Teo_Amatlan_PI_Exonic_chr1   <- BETA(Teo_Amatlan_PI_chr1,   Exonic_Sites_chr1)
+Teo_ElRodeo_PI_Exonic_chr1   <- BETA(Teo_ElRodeo_PI_chr1,   Exonic_Sites_chr1)
+Teo_Crucero_PI_Exonic_chr1   <- BETA(Teo_Crucero_PI_chr1,   Exonic_Sites_chr1)
+Teo_LosGuajes_PI_Exonic_chr1 <- BETA(Teo_LosGuajes_PI_chr1, Exonic_Sites_chr1)
 
-a<-smooth.spline(x=Teo_Palmar_PI_Exonic$PI,y=Teo_Palmar_PI_Exonic$Beta_Estimate)
-b<-smooth.spline(x=Teo_SanLo_PI_Exonic$PI,y=Teo_SanLo_PI_Exonic$Beta_Estimate)
-c<-smooth.spline(x=Teo_Amatlan_PI_Exonic$PI,y=Teo_Amatlan_PI_Exonic$Beta_Estimate)
-d<-smooth.spline(x=Teo_ElRodeo_PI_Exonic$PI,y=Teo_ElRodeo_PI_Exonic$Beta_Estimate)
-e<-smooth.spline(x=Teo_Crucero_PI_Exonic$PI,y=Teo_Crucero_PI_Exonic$Beta_Estimate)
-f<-smooth.spline(x=Teo_LosGuajes_PI_Exonic$PI,y=Teo_LosGuajes_PI_Exonic$Beta_Estimate)
+LR_Palmar_PI_Exonic_chr1    <- BETA(LR_Palmar_PI_chr1,   Exonic_Sites_chr1)
+LR_SanLo_PI_Exonic_chr1     <- BETA(LR_SanLo_PI_chr1,    Exonic_Sites_chr1)
+LR_Amatlan_PI_Exonic_chr1   <- BETA(LR_Amatlan_PI_chr1,  Exonic_Sites_chr1)
+LR_Crucero_PI_Exonic_chr1   <- BETA(LR_Crucero_PI_chr1,  Exonic_Sites_chr1)
+LR_LosGuajes_PI_Exonic_chr1 <- BETA(LR_LosGuajes_PI_chr1,Exonic_Sites_chr1)
 
-plot(a, col="blue",lwd=1,type="l",xlab=expression(pi),ylab=expression(beta),main="PI vs BETA")
+Teo_Palmar_PI_Exonic_chr2    <- BETA(Teo_Palmar_PI_chr2,    Exonic_Sites_chr2)
+Teo_SanLo_PI_Exonic_chr2     <- BETA(Teo_SanLo_PI_chr2,     Exonic_Sites_chr2)
+Teo_Amatlan_PI_Exonic_chr2   <- BETA(Teo_Amatlan_PI_chr2,   Exonic_Sites_chr2)
+Teo_ElRodeo_PI_Exonic_chr2   <- BETA(Teo_ElRodeo_PI_chr2,   Exonic_Sites_chr2)
+Teo_Crucero_PI_Exonic_chr2   <- BETA(Teo_Crucero_PI_chr2,   Exonic_Sites_chr2)
+Teo_LosGuajes_PI_Exonic_chr2 <- BETA(Teo_LosGuajes_PI_chr2, Exonic_Sites_chr2)
+
+LR_Palmar_PI_Exonic_chr2    <- BETA(LR_Palmar_PI_chr2,   Exonic_Sites_chr2)
+LR_SanLo_PI_Exonic_chr2     <- BETA(LR_SanLo_PI_chr2,    Exonic_Sites_chr2)
+LR_Amatlan_PI_Exonic_chr2   <- BETA(LR_Amatlan_PI_chr2,  Exonic_Sites_chr2)
+LR_Crucero_PI_Exonic_chr2   <- BETA(LR_Crucero_PI_chr2,  Exonic_Sites_chr2)
+LR_LosGuajes_PI_Exonic_chr2 <- BETA(LR_LosGuajes_PI_chr2,Exonic_Sites_chr2)
+
+Teo_Palmar_PI_Exonic_chr3    <- BETA(Teo_Palmar_PI_chr3,    Exonic_Sites_chr3)
+Teo_SanLo_PI_Exonic_chr3     <- BETA(Teo_SanLo_PI_chr3,     Exonic_Sites_chr3)
+Teo_Amatlan_PI_Exonic_chr3   <- BETA(Teo_Amatlan_PI_chr3,   Exonic_Sites_chr3)
+Teo_ElRodeo_PI_Exonic_chr3   <- BETA(Teo_ElRodeo_PI_chr3,   Exonic_Sites_chr3)
+Teo_Crucero_PI_Exonic_chr3   <- BETA(Teo_Crucero_PI_chr3,   Exonic_Sites_chr3)
+Teo_LosGuajes_PI_Exonic_chr3 <- BETA(Teo_LosGuajes_PI_chr3, Exonic_Sites_chr3)
+
+LR_Palmar_PI_Exonic_chr3    <- BETA(LR_Palmar_PI_chr3,   Exonic_Sites_chr3)
+LR_SanLo_PI_Exonic_chr3     <- BETA(LR_SanLo_PI_chr3,    Exonic_Sites_chr3)
+LR_Amatlan_PI_Exonic_chr3   <- BETA(LR_Amatlan_PI_chr3,  Exonic_Sites_chr3)
+LR_Crucero_PI_Exonic_chr3   <- BETA(LR_Crucero_PI_chr3,  Exonic_Sites_chr3)
+LR_LosGuajes_PI_Exonic_chr3 <- BETA(LR_LosGuajes_PI_chr3,Exonic_Sites_chr3)
+```
+
+Smooth Spline of Beta vs PI for Teosinte Populations Chromosome 1
+```{r}
+#pdf()
+a<-smooth.spline(x=Teo_Palmar_PI_Exonic_chr1$PI,y=Teo_Palmar_PI_Exonic_chr1$Beta_Estimate,lambda=.01)
+b<-smooth.spline(x=Teo_SanLo_PI_Exonic_chr1$PI,y=Teo_SanLo_PI_Exonic_chr1$Beta_Estimate,lambda=.01)
+c<-smooth.spline(x=Teo_Amatlan_PI_Exonic_chr1$PI,y=Teo_Amatlan_PI_Exonic_chr1$Beta_Estimate,lambda=.01)
+d<-smooth.spline(x=Teo_ElRodeo_PI_Exonic_chr1$PI,y=Teo_ElRodeo_PI_Exonic_chr1$Beta_Estimate,lambda=.01)
+e<-smooth.spline(x=Teo_Crucero_PI_Exonic_chr1$PI,y=Teo_Crucero_PI_Exonic_chr1$Beta_Estimate,lambda=.01)
+f<-smooth.spline(x=Teo_LosGuajes_PI_Exonic_chr1$PI,y=Teo_LosGuajes_PI_Exonic_chr1$Beta_Estimate,lambda=.01)
+
+plot(a, col="blue",lwd=1,type="l",xlab=expression(pi),ylab=expression(beta),main="PI vs BETA Chromosome 1 in Teosinte Populations")
 lines(b,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="red" )
 lines(c,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="green" )
 lines(d,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="orange" )
@@ -103,18 +204,131 @@ lines(e,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="yellow" )
 lines(f,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="purple" )
 legend(.025,.6, legend=c("Palmar Chico", "San Lorenzo", "Amatlan de Casas", "El Rodeo", "Crucero Lagunitas", "Los Guajes"),
        col=c("blue", "red", "green","orange","yellow","purple"), lty=1, cex=0.8)
-
+#dev.off()
 ```
 
+Smooth Spline of Beta vs PI for Land Race Populations Chromosome 1
 ```{r}
-Teo_Palmar_PI_Exonic<- BETA(Teo_Palmar_PI)
+#pdf()
+a<-smooth.spline(x=LR_Palmar_PI_Exonic_chr1$PI,y=LR_Palmar_PI_Exonic_chr1$Beta_Estimate,lambda=.01)
+b<-smooth.spline(x=LR_SanLo_PI_Exonic_chr1$PI,y=LR_SanLo_PI_Exonic_chr1$Beta_Estimate,lambda=.01)
+c<-smooth.spline(x=LR_Amatlan_PI_Exonic_chr1$PI,y=LR_Amatlan_PI_Exonic_chr1$Beta_Estimate,lambda=.01)
+e<-smooth.spline(x=LR_Crucero_PI_Exonic_chr1$PI,y=LR_Crucero_PI_Exonic_chr1$Beta_Estimate,lambda=.01)
+f<-smooth.spline(x=LR_LosGuajes_PI_Exonic_chr1$PI,y=LR_LosGuajes_PI_Exonic_chr1$Beta_Estimate,lambda=.01)
 
-ggplot(data=Teo_Palmar_PI_Exonic,aes(x=PI,y=Beta_Estimate))+geom_point(alpha=.9)
-summary(lm(PI~exp(Beta_Estimate),data=Teo_Palmar_PI_Exonic))
-plot(smooth.spline(x=Teo_Palmar_PI_Exonic$BIN_START,y=Teo_Palmar_PI_Exonic$Beta_Estimate),col="blue",lwd=4,type="l")
-plot(smooth.spline(x=Teo_Palmar_PI_Exonic$PI,y=Teo_Palmar_PI_Exonic$Beta_Estimate),col="blue",lwd=4,type="l",xlab=expression(pi),ylab=expression(beta),main="PI vs BETA")
+plot(a, col="blue",lwd=1,type="l",xlab=expression(pi),ylab=expression(beta),main="PI vs BETA Chromosome 1 in Land Race Populations")
+lines(b,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="red" )
+lines(c,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="green" )
+lines(e,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="yellow" )
+lines(f,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="purple" )
+legend(.025,.8, legend=c("Palmar Chico", "San Lorenzo", "Amatlan de Casas", "Crucero Lagunitas", "Los Guajes"),
+       col=c("blue", "red", "green","orange","yellow","purple"), lty=1, cex=0.8)
+#dev.off()
 ```
 
+Smooth Spline of Beta vs PI for Teosinte Populations Chromosome 2
+```{r}
+#pdf()
+a<-smooth.spline(x=Teo_Palmar_PI_Exonic_chr2$PI,y=Teo_Palmar_PI_Exonic_chr2$Beta_Estimate,lambda=.01)
+b<-smooth.spline(x=Teo_SanLo_PI_Exonic_chr2$PI,y=Teo_SanLo_PI_Exonic_chr2$Beta_Estimate,lambda=.01)
+c<-smooth.spline(x=Teo_Amatlan_PI_Exonic_chr2$PI,y=Teo_Amatlan_PI_Exonic_chr2$Beta_Estimate,lambda=.01)
+d<-smooth.spline(x=Teo_ElRodeo_PI_Exonic_chr2$PI,y=Teo_ElRodeo_PI_Exonic_chr2$Beta_Estimate,lambda=.01)
+e<-smooth.spline(x=Teo_Crucero_PI_Exonic_chr2$PI,y=Teo_Crucero_PI_Exonic_chr2$Beta_Estimate,lambda=.01)
+f<-smooth.spline(x=Teo_LosGuajes_PI_Exonic_chr2$PI,y=Teo_LosGuajes_PI_Exonic_chr2$Beta_Estimate,lambda=.01)
 
+plot(a, col="blue",lwd=1,type="l",xlab=expression(pi),ylab=expression(beta),main="PI vs BETA Chromosome 2 in Teosinte Populations")
+lines(b,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="red" )
+lines(c,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="green" )
+lines(d,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="orange" )
+lines(e,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="yellow" )
+lines(f,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="purple" )
+legend(.025,.6, legend=c("Palmar Chico", "San Lorenzo", "Amatlan de Casas", "El Rodeo", "Crucero Lagunitas", "Los Guajes"),
+       col=c("blue", "red", "green","orange","yellow","purple"), lty=1, cex=0.8)
+#dev.off()
+```
 
+Smooth Spline of Beta vs PI for Land Race Populations Chromosome 2
+```{r}
+#pdf()
+a<-smooth.spline(x=LR_Palmar_PI_Exonic_chr2$PI,y=LR_Palmar_PI_Exonic_chr2$Beta_Estimate,lambda=.01)
+b<-smooth.spline(x=LR_SanLo_PI_Exonic_chr2$PI,y=LR_SanLo_PI_Exonic_chr2$Beta_Estimate,lambda=.01)
+c<-smooth.spline(x=LR_Amatlan_PI_Exonic_chr2$PI,y=LR_Amatlan_PI_Exonic_chr2$Beta_Estimate,lambda=.01)
+e<-smooth.spline(x=LR_Crucero_PI_Exonic_chr2$PI,y=LR_Crucero_PI_Exonic_chr2$Beta_Estimate,lambda=.01)
+f<-smooth.spline(x=LR_LosGuajes_PI_Exonic_chr2$PI,y=LR_LosGuajes_PI_Exonic_chr2$Beta_Estimate,lambda=.01)
 
+plot(a, col="blue",lwd=1,type="l",xlab=expression(pi),ylab=expression(beta),main="PI vs BETA Chromosome 2 in Land Race Populations")
+lines(b,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="red" )
+lines(c,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="green" )
+lines(e,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="yellow" )
+lines(f,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="purple" )
+legend(.025,.8, legend=c("Palmar Chico", "San Lorenzo", "Amatlan de Casas", "Crucero Lagunitas", "Los Guajes"),
+       col=c("blue", "red", "green","orange","yellow","purple"), lty=1, cex=0.8)
+#dev.off()
+```
+Smooth Spline of Beta vs PI for Teosinte Populations Chromosome 3
+```{r}
+#pdf()
+a<-smooth.spline(x=Teo_Palmar_PI_Exonic_chr3$PI,y=Teo_Palmar_PI_Exonic_chr3$Beta_Estimate,lambda=.01)
+b<-smooth.spline(x=Teo_SanLo_PI_Exonic_chr3$PI,y=Teo_SanLo_PI_Exonic_chr3$Beta_Estimate,lambda=.01)
+c<-smooth.spline(x=Teo_Amatlan_PI_Exonic_chr3$PI,y=Teo_Amatlan_PI_Exonic_chr3$Beta_Estimate,lambda=.01)
+d<-smooth.spline(x=Teo_ElRodeo_PI_Exonic_chr3$PI,y=Teo_ElRodeo_PI_Exonic_chr3$Beta_Estimate,lambda=.01)
+e<-smooth.spline(x=Teo_Crucero_PI_Exonic_chr3$PI,y=Teo_Crucero_PI_Exonic_chr3$Beta_Estimate,lambda=.01)
+f<-smooth.spline(x=Teo_LosGuajes_PI_Exonic_chr3$PI,y=Teo_LosGuajes_PI_Exonic_chr3$Beta_Estimate,lambda=.01)
+
+plot(a, col="blue",lwd=1,type="l",xlab=expression(pi),ylab=expression(beta),main="PI vs BETA Chromosome 3 in Teosinte Populations")
+lines(b,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="red" )
+lines(c,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="green" )
+lines(d,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="orange" )
+lines(e,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="yellow" )
+lines(f,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="purple" )
+legend(.025,.6, legend=c("Palmar Chico", "San Lorenzo", "Amatlan de Casas", "El Rodeo", "Crucero Lagunitas", "Los Guajes"),
+       col=c("blue", "red", "green","orange","yellow","purple"), lty=1, cex=0.8)
+#dev.off()
+```
+
+Smooth Spline of Beta vs PI for Land Race Populations Chromosome 3
+```{r}
+#pdf()
+a<-smooth.spline(x=LR_Palmar_PI_Exonic_chr3$PI,y=LR_Palmar_PI_Exonic_chr3$Beta_Estimate,lambda=.01)
+b<-smooth.spline(x=LR_SanLo_PI_Exonic_chr3$PI,y=LR_SanLo_PI_Exonic_chr3$Beta_Estimate,lambda=.01)
+c<-smooth.spline(x=LR_Amatlan_PI_Exonic_chr3$PI,y=LR_Amatlan_PI_Exonic_chr3$Beta_Estimate,lambda=.01)
+e<-smooth.spline(x=LR_Crucero_PI_Exonic_chr3$PI,y=LR_Crucero_PI_Exonic_chr3$Beta_Estimate,lambda=.01)
+f<-smooth.spline(x=LR_LosGuajes_PI_Exonic_chr3$PI,y=LR_LosGuajes_PI_Exonic_chr3$Beta_Estimate,lambda=.01)
+
+plot(a, col="blue",lwd=1,type="l",xlab=expression(pi),ylab=expression(beta),main="PI vs BETA Chromosome 3 in Land Race Populations")
+lines(b,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="red" )
+lines(c,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="green" )
+lines(e,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="yellow" )
+lines(f,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="purple" )
+legend(.025,.8, legend=c("Palmar Chico", "San Lorenzo", "Amatlan de Casas", "Crucero Lagunitas", "Los Guajes"),
+       col=c("blue", "red", "green","orange","yellow","purple"), lty=1, cex=0.8)
+#dev.off()
+```
+
+Smooth Spline of Beta vs PI for Teosinte Populations Chromosome 1 and 2
+```{r}
+#pdf()
+Teo_Palmar_PI_Exonic_chr1_chr2     <- rbind(Teo_Palmar_PI_Exonic_chr1,Teo_Palmar_PI_Exonic_chr2)  
+Teo_SanLo_PI_Exonic_chr1_chr2      <- rbind(Teo_SanLo_PI_Exonic_chr1,Teo_SanLo_PI_Exonic_chr2)  
+Teo_Amatlan_PI_Exonic_chr1_chr2    <- rbind(Teo_Amatlan_PI_Exonic_chr1,Teo_Amatlan_PI_Exonic_chr2)  
+Teo_ElRodeo_PI_Exonic_chr1_chr2    <- rbind(Teo_ElRodeo_PI_Exonic_chr1,Teo_ElRodeo_PI_Exonic_chr2) 
+Teo_Crucero_PI_Exonic_chr1_chr2    <- rbind(Teo_Crucero_PI_Exonic_chr1,Teo_Crucero_PI_Exonic_chr2) 
+Teo_LosGuajes_PI_Exonic_chr1_chr2  <- rbind(Teo_LosGuajes_PI_Exonic_chr1,Teo_LosGuajes_PI_Exonic_chr2)
+
+a<-smooth.spline(x=Teo_Palmar_PI_Exonic_chr1_chr2$PI,y=Teo_Palmar_PI_Exonic_chr1_chr2$Beta_Estimate,lambda=.01)
+b<-smooth.spline(x=Teo_SanLo_PI_Exonic_chr1_chr2$PI,y=Teo_SanLo_PI_Exonic_chr1_chr2$Beta_Estimate,lambda=.01)
+c<-smooth.spline(x=Teo_Amatlan_PI_Exonic_chr1_chr2$PI,y=Teo_Amatlan_PI_Exonic_chr1_chr2$Beta_Estimate,lambda=.01)
+d<-smooth.spline(x=Teo_ElRodeo_PI_Exonic_chr1_chr2$PI,y=Teo_ElRodeo_PI_Exonic_chr1_chr2$Beta_Estimate,lambda=.01)
+e<-smooth.spline(x=Teo_Crucero_PI_Exonic_chr1_chr2$PI,y=Teo_Crucero_PI_Exonic_chr1_chr2$Beta_Estimate,lambda=.01)
+f<-smooth.spline(x=Teo_LosGuajes_PI_Exonic_chr1_chr2$PI,y=Teo_LosGuajes_PI_Exonic_chr1_chr2$Beta_Estimate,lambda=.01)
+
+plot(a, col="blue",lwd=1,type="l",xlab=expression(pi),ylab=expression(beta),main="PI vs BETA Chromosomes 1 and 2 in Teosinte Populations")
+lines(b,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="red" )
+lines(c,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="green" )
+lines(d,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="orange" )
+lines(e,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="yellow" )
+lines(f,cex.lab=2,cex.axis=1.5,lwd=1, type="l",col="purple" )
+legend(.025,.6, legend=c("Palmar Chico", "San Lorenzo", "Amatlan de Casas", "El Rodeo", "Crucero Lagunitas", "Los Guajes"),
+       col=c("blue", "red", "green","orange","yellow","purple"), lty=1, cex=0.8)
+#dev.off()
+```
