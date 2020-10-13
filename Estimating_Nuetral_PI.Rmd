@@ -1,0 +1,512 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(data.table)
+library(tidyverse)
+library(cowplot)
+library(parallel)
+library(ggplot2)
+library(ggExtra)
+library(gridExtra)
+library(minpack.lm)
+library(rlist)
+library(glue)
+options(scipen = 999)
+```
+
+Simply Change Sample Size to Change all Code
+```{r}
+pi_winsize=100000
+mu=1E-7 
+```
+
+Get new genetic map for chromosome 1, 2 and 3 bp_pos, cm/Mb, and cM 
+```{r}
+
+gen_map_all_chr <- fread("~/Linked_Selection/ogut_v5.map.txt")  %>% 
+  na.omit() %>%
+  mutate(cm=cm+abs(min(cm))) %>%
+  rename(Chr = chr)
+
+gen_map_chr1  <- filter(gen_map_all_chr,Chr==1)  %>% mutate(Chr = "chr1") 
+gen_map_chr2  <- filter(gen_map_all_chr,Chr==2)  %>% mutate(Chr = "chr2") %>% filter(pos<2412e5) # The final 2 points of this map have an error
+gen_map_chr3  <- filter(gen_map_all_chr,Chr==3)  %>% mutate(Chr = "chr3")
+gen_map_chr4  <- filter(gen_map_all_chr,Chr==4)  %>% mutate(Chr = "chr4")
+gen_map_chr5  <- filter(gen_map_all_chr,Chr==5)  %>% mutate(Chr = "chr5")
+gen_map_chr6  <- filter(gen_map_all_chr,Chr==6)  %>% mutate(Chr = "chr6")
+gen_map_chr7  <- filter(gen_map_all_chr,Chr==7)  %>% mutate(Chr = "chr7")
+gen_map_chr8  <- filter(gen_map_all_chr,Chr==8)  %>% mutate(Chr = "chr8")
+gen_map_chr9  <- filter(gen_map_all_chr,Chr==9)  %>% mutate(Chr = "chr9")
+gen_map_chr10 <- filter(gen_map_all_chr,Chr==10) %>% mutate(Chr = "chr10") 
+```
+
+
+
+CM Function
+```{r}
+CM = function(data,gen_map){mutate(data,
+                  cm_start = approx(x=gen_map$pos,y=gen_map$cm,xout=data$BIN_START)$y,
+                  cm_end   = approx(x=gen_map$pos,y=gen_map$cm,xout=data$BIN_END)$y,
+                  cm_mid   = (cm_start + cm_end)/2,
+                  rec      = cm_end-cm_start) %>% 
+                   
+                  na.omit()}
+
+```
+
+```{r}
+Get_REC = function(PI_Data){
+REC_PI_chr1  = filter(PI_Data,Chr == "chr1"  )   %>% CM(gen_map_chr1 )
+REC_PI_chr2  = filter(PI_Data,Chr == "chr2"  )   %>% CM(gen_map_chr2 )
+REC_PI_chr3  = filter(PI_Data,Chr == "chr3"  )   %>% CM(gen_map_chr3 )
+REC_PI_chr4  = filter(PI_Data,Chr == "chr4"  )   %>% CM(gen_map_chr4 )
+REC_PI_chr5  = filter(PI_Data,Chr == "chr5"  )   %>% CM(gen_map_chr5 )
+REC_PI_chr6  = filter(PI_Data,Chr == "chr6"  )   %>% CM(gen_map_chr6 )
+REC_PI_chr7  = filter(PI_Data,Chr == "chr7"  )   %>% CM(gen_map_chr7 )
+REC_PI_chr8  = filter(PI_Data,Chr == "chr8"  )   %>% CM(gen_map_chr8 )
+REC_PI_chr9  = filter(PI_Data,Chr == "chr9"  )   %>% CM(gen_map_chr9 )
+REC_PI_chr10 = filter(PI_Data,Chr == "chr10")   %>% CM(gen_map_chr10) 
+
+return(rbind(REC_PI_chr1 ,
+             REC_PI_chr2 ,
+             REC_PI_chr3 ,
+             REC_PI_chr4 ,
+             REC_PI_chr5 ,
+             REC_PI_chr6 ,
+             REC_PI_chr7 ,
+             REC_PI_chr8 ,
+             REC_PI_chr9 ,
+             REC_PI_chr10 ) ) #%>% filter(rec < .04)) 
+}
+```
+
+Function for reading in all our PI data
+```{r}
+Read_PI_Data = function(File_Path,POP_Name){
+  a = fread(File_Path) %>% na.omit() %>% mutate(BIN_START=WinCenter-pi_winsize/2 + 1,BIN_END=WinCenter+pi_winsize/2,PI = tP / nSites, BIN_MID = WinCenter, pop = POP_Name ) %>% select(Chr,pop,BIN_START,BIN_END,BIN_MID,nSites,tP,PI) %>% filter(nSites > pi_winsize*.2)
+  return(a)
+}
+```
+
+```{r}
+LR_Amatlan_PI  = Read_PI_Data(glue("~/Linked_Selection/PI_Data_All_Pops/v5--LR--Amatlan_de_Canas.{pi_winsize}BP_theta.thetasWindow.gz.pestPG") ,"LR_Amatlan_de_Canas") 
+Teo_Amatlan_PI = Read_PI_Data(glue("~/Linked_Selection/PI_Data_All_Pops/v5--Teo--Amatlan_de_Canas.{pi_winsize}BP_theta.thetasWindow.gz.pestPG"),"Teo_Amatlan_de_Canas")
+
+LR_Crucero_PI  = Read_PI_Data(glue("~/Linked_Selection/PI_Data_All_Pops/v5--LR--Crucero_Lagunitas.{pi_winsize}BP_theta.thetasWindow.gz.pestPG") ,"LR_Crucero_Lagunitas")
+Teo_Crucero_PI = Read_PI_Data(glue("~/Linked_Selection/PI_Data_All_Pops/v5--Teo--Crucero_Lagunitas.{pi_winsize}BP_theta.thetasWindow.gz.pestPG"),"Teo_Crucero_Lagunitas")
+
+LR_LosGuajes_PI  = Read_PI_Data(glue("~/Linked_Selection/PI_Data_All_Pops/v5--LR--Los_Guajes.{pi_winsize}BP_theta.thetasWindow.gz.pestPG" ),"LR_Los_Guajes")
+Teo_LosGuajes_PI = Read_PI_Data(glue("~/Linked_Selection/PI_Data_All_Pops/v5--Teo--Los_Guajes.{pi_winsize}BP_theta.thetasWindow.gz.pestPG"),"Teo_Los_Guajes")
+
+LR_Palmar_PI  = Read_PI_Data(glue("~/Linked_Selection/PI_Data_All_Pops/v5--LR--Palmar_Chico.{pi_winsize}BP_theta.thetasWindow.gz.pestPG" ),"LR_Palmar_Chico")
+Teo_Palmar_PI = Read_PI_Data(glue("~/Linked_Selection/PI_Data_All_Pops/v5--Teo--Palmar_Chico.{pi_winsize}BP_theta.thetasWindow.gz.pestPG"),"Teo_Palmar_Chico")
+
+LR_Sanlo_PI  = Read_PI_Data(glue("~/Linked_Selection/PI_Data_All_Pops/v5--LR--San_Lorenzo.{pi_winsize}BP_theta.thetasWindow.gz.pestPG" ),"LR_San_Lorenzo")
+Teo_SanLo_PI = Read_PI_Data(glue("~/Linked_Selection/PI_Data_All_Pops/v5--Teo--San_Lorenzo.{pi_winsize}BP_theta.thetasWindow.gz.pestPG"),"Teo_San_Lorenzo")
+
+Teo_ElRodeo_PI = Read_PI_Data(glue("~/Linked_Selection/PI_Data_All_Pops/v5--Teo--El_Rodeo.{pi_winsize}BP_theta.thetasWindow.gz.pestPG"),"Teo_El_Rodeo")
+
+
+```
+
+Get Recombination Rate for Every Population for Every Chromosome
+```{r}
+LR_Amatlan_PI_REC    = Get_REC(LR_Amatlan_PI )  
+Teo_Amatlan_PI_REC   = Get_REC(Teo_Amatlan_PI)  
+LR_Crucero_PI_REC    = Get_REC(LR_Crucero_PI )  
+Teo_Crucero_PI_REC   = Get_REC(Teo_Crucero_PI)  
+LR_LosGuajes_PI_REC  = Get_REC(LR_LosGuajes_PI) 
+Teo_LosGuajes_PI_REC = Get_REC(Teo_LosGuajes_PI)
+LR_Palmar_PI_REC     = Get_REC(LR_Palmar_PI  )  
+Teo_Palmar_PI_REC    = Get_REC(Teo_Palmar_PI )  
+LR_Sanlo_PI_REC      = Get_REC(LR_Sanlo_PI )    
+Teo_SanLo_PI_REC     = Get_REC(Teo_SanLo_PI)    
+Teo_ElRodeo_PI_REC   = Get_REC(Teo_ElRodeo_PI)  
+
+```
+
+
+Read in data with Exonic Sites and Values of G
+```{r}
+Exonic_Sites_chr1=fread(glue("~/Linked_Selection/G_{pi_winsize}BP_chr1.txt"))
+Exonic_Sites_chr2=fread(glue("~/Linked_Selection/G_{pi_winsize}BP_chr2.txt"))
+Exonic_Sites_chr3=fread(glue("~/Linked_Selection/G_{pi_winsize}BP_chr3.txt"))
+Exonic_Sites_chr4=fread(glue("~/Linked_Selection/G_{pi_winsize}BP_chr4.txt"))
+Exonic_Sites_chr5=fread(glue("~/Linked_Selection/G_{pi_winsize}BP_chr5.txt"))
+Exonic_Sites_chr6=fread(glue("~/Linked_Selection/G_{pi_winsize}BP_chr6.txt"))
+Exonic_Sites_chr7=fread(glue("~/Linked_Selection/G_{pi_winsize}BP_chr7.txt"))
+Exonic_Sites_chr8=fread(glue("~/Linked_Selection/G_{pi_winsize}BP_chr8.txt"))
+Exonic_Sites_chr9=fread(glue("~/Linked_Selection/G_{pi_winsize}BP_chr9.txt"))
+Exonic_Sites_chr10=fread(glue("~/Linked_Selection/G_{pi_winsize}BP_chr10.txt"))
+```
+
+
+Function that uses exonic sites, morgans, and mutation rate to calculate estimate beta
+
+$\beta=e^{-\mu\frac{L}{M}}$
+
+```{r}
+BGS_Components=function(data,Exonic_Sites){merge(data,Exonic_Sites,by="BIN_START") %>% 
+       #na.omit() %>%
+       rename(cm_start=cm_start.x,cm_end=cm_end.x,rec=rec.x,BIN_END=BIN_END.y,Chr = Chr.x) %>%
+       select(Chr,pop,PI,nbr_exonic_sites,fd,rec,BIN_START,BIN_END,cm_start,cm_end,G) %>%
+       mutate(Beta_Estimate=exp(-(mu*nbr_exonic_sites)/(rec/100)),rho= (1-exp(-1*(rec/pi_winsize)*2/100))/2,cm_mid=(cm_start+cm_end)/2)  #%>% 
+      #filter(PI<.02)
+   }
+```
+
+```{r}
+Get_LS_Components = function(PI_Data){
+PI_chr1  = filter(PI_Data,Chr == "chr1"  )   %>% BGS_Components(Exonic_Sites_chr1 )
+PI_chr2  = filter(PI_Data,Chr == "chr2"  )   %>% BGS_Components(Exonic_Sites_chr2 )
+PI_chr3  = filter(PI_Data,Chr == "chr3"  )   %>% BGS_Components(Exonic_Sites_chr3 )
+PI_chr4  = filter(PI_Data,Chr == "chr4"  )   %>% BGS_Components(Exonic_Sites_chr4 )
+PI_chr5  = filter(PI_Data,Chr == "chr5"  )   %>% BGS_Components(Exonic_Sites_chr5 )
+PI_chr6  = filter(PI_Data,Chr == "chr6"  )   %>% BGS_Components(Exonic_Sites_chr6 )
+PI_chr7  = filter(PI_Data,Chr == "chr7"  )   %>% BGS_Components(Exonic_Sites_chr7 )
+PI_chr8  = filter(PI_Data,Chr == "chr8"  )   %>% BGS_Components(Exonic_Sites_chr8 )
+PI_chr9  = filter(PI_Data,Chr == "chr9"  )   %>% BGS_Components(Exonic_Sites_chr9 )
+PI_chr10 = filter(PI_Data,Chr == "chr10")    %>% BGS_Components(Exonic_Sites_chr10) 
+
+return(rbind(PI_chr1 ,
+             PI_chr2 ,
+             PI_chr3 ,
+             PI_chr4 ,
+             PI_chr5 ,
+             PI_chr6 ,
+             PI_chr7 ,
+             PI_chr8 ,
+             PI_chr9 ,
+             PI_chr10 ) )
+}
+```
+
+```{r}
+ LS_LR_Amatlan_PI_REC    =  Get_LS_Components(LR_Amatlan_PI_REC    )
+ LS_Teo_Amatlan_PI_REC   =  Get_LS_Components(Teo_Amatlan_PI_REC   )
+ LS_LR_Crucero_PI_REC    =  Get_LS_Components(LR_Crucero_PI_REC    )
+ LS_Teo_Crucero_PI_REC   =  Get_LS_Components(Teo_Crucero_PI_REC   )
+ LS_LR_LosGuajes_PI_REC  =  Get_LS_Components(LR_LosGuajes_PI_REC  )
+ LS_Teo_LosGuajes_PI_REC =  Get_LS_Components(Teo_LosGuajes_PI_REC )
+ LS_LR_Palmar_PI_REC     =  Get_LS_Components(LR_Palmar_PI_REC     )
+ LS_Teo_Palmar_PI_REC    =  Get_LS_Components(Teo_Palmar_PI_REC    )
+ LS_LR_Sanlo_PI_REC      =  Get_LS_Components(LR_Sanlo_PI_REC      )
+ LS_Teo_SanLo_PI_REC     =  Get_LS_Components(Teo_SanLo_PI_REC     )
+ LS_Teo_ElRodeo_PI_REC   =  Get_LS_Components(Teo_ElRodeo_PI_REC   )
+```
+Silas Approach
+```{r}
+#deterministic model components
+theta_full <- function(theta, G_i, alpha, fd_i, rbp_i){
+  theta / (1/exp(-G_i) + alpha * fd_i / rbp_i)
+}
+
+theta_noBGS <- function(theta, G_i, alpha, fd_i, rbp_i){
+  theta / (1 + alpha * fd_i / rbp_i)
+} 
+
+theta_noHH <- function(theta, G_i, alpha, fd_i, rbp_i){
+  theta / (1/exp(-G_i))
+} 
+
+theta_intercept <- function(theta, G_i, alpha, fd_i, rbp_i){
+  theta
+}
+
+#log likelihood equations to optimize
+LL_full <- function(pi_obs, par, G_i, fd_i, rbp_i, mode = "beta"){
+  
+  #rescaled parameters to make optimization easier
+  theta <- 1/exp(par[1])
+  alpha <- 1/exp(par[2])
+  sigma <- 1/exp(par[3])
+  
+  
+  pi_pred <- theta_full(theta, G_i, alpha, fd_i, rbp_i)
+  
+  if(mode == "beta"){
+    -sum(dbeta(x = pi_obs, shape1 = pi_pred * sigma, shape2 = (1 - pi_pred) * sigma, log = TRUE))  
+  } else {
+    -sum(dnorm(x = pi_obs, mean = pi_pred, sd = sigma, log = TRUE))
+  }
+  
+}
+
+LL_noBGS <- function(pi_obs, par, G_i, fd_i, rbp_i, mode = "beta"){
+  
+  #rescaled parameters to make optimization easier
+  theta <- 1/exp(par[1])
+  alpha <- 1/exp(par[2])
+  sigma <- 1/exp(par[3])
+  
+  pi_pred <- theta_noBGS(theta, G_i, alpha, fd_i, rbp_i)
+  
+  if(mode == "beta"){
+    -sum(dbeta(x = pi_obs, shape1 = pi_pred * sigma, shape2 = (1 - pi_pred) * sigma, log = TRUE))  
+  } else {
+    -sum(dnorm(x = pi_obs, mean = pi_pred, sd = sigma, log = TRUE))
+  }
+}
+
+
+LL_noHH <- function(pi_obs, par, G_i, fd_i, rbp_i, mode = "beta"){
+  
+  #rescaled parameters to make optimization easier
+  theta <- 1/exp(par[1])
+  sigma <- 1/exp(par[2])
+  
+  pi_pred <- theta_noHH(theta, G_i, alpha, fd_i, rbp_i)
+  
+  if(mode == "beta"){
+    -sum(dbeta(x = pi_obs, shape1 = pi_pred * sigma, shape2 = (1 - pi_pred) * sigma, log = TRUE))  
+  } else {
+    -sum(dnorm(x = pi_obs, mean = pi_pred, sd = sigma, log = TRUE))
+  }
+}
+
+
+LL_intercept <- function(pi_obs, par, G_i, fd_i, rbp_i, mode = "beta"){
+  
+  #rescaled parameters to make optimization easier
+  theta <- 1/exp(par[1])
+  sigma <- 1/exp(par[2])
+  
+  pi_pred <- theta_intercept(theta, G_i, alpha, fd_i, rbp_i)
+  
+  if(mode == "beta"){
+    -sum(dbeta(x = pi_obs, shape1 = pi_pred * sigma, shape2 = (1 - pi_pred) * sigma, log = TRUE))  
+  } else {
+    -sum(dnorm(x = pi_obs, mean = pi_pred, sd = sigma, log = TRUE))
+  }
+}
+
+
+#get confidence intervals of parameters
+get_conf <- function(model, param = c("theta", "alpha", "sigma")){
+  
+  se <- sqrt(diag(solve(model$hessian)))
+  lows <- 1/exp(model$par+1.96*se)
+  highs <- 1/exp(model$par-1.96*se)
+  expected <- 1/exp(model$par)
+  conf_df <- data.frame(
+    param = param, 
+    lower=lows, 
+    value=expected, 
+    upper=highs)
+  conf_df
+}
+
+#prediction intervals based on full model with uncertainty
+predict_df <- function(model, new_data, E_theta, param = c("theta", "alpha", "sigma"), levels = c(0.025, 0.975), mode = "beta"){
+  
+  
+  conf_df <- get_conf(model, param = param)
+  theta_df <- filter(conf_df, param == "theta")
+  alpha_df <- filter(conf_df, param == "alpha")
+  sig_df <- filter(conf_df, param == "sigma")
+  sigma_low <- sig_df$lower
+  sigma_upper <- sig_df$upper
+  
+  e_exp <- E_theta(theta = theta_df$value[1], 
+                   G_i = new_data$G_i, 
+                   alpha = alpha_df$value[1], 
+                   fd_i = new_data$fd_i, 
+                   rbp_i = new_data$rbp_i)
+  
+  
+  if(mode == "beta"){
+  pred_df <- 
+    e_exp %>%
+    map_df(~{
+      tibble(
+        expected_pi = .x,
+        low = quantile(rbeta(100, shape1 = .x*sigma_low, shape2 = (1 - .x) * sigma_low), probs = levels[1]),
+        high = quantile(rbeta(100, shape1 = .x*sigma_upper, shape2 = ( 1-.x) * sigma_upper), probs = levels[2])
+      )
+    })    
+  } else {
+      pred_df <- 
+    e_exp %>%
+    map_df(~{
+      tibble(
+        expected_pi = .x,
+        low = quantile(rnorm(100, .x, sigma_low), probs = levels[1]),
+        high = quantile(rnorm(100, .x, sigma_upper), probs = levels[2])
+      )
+    })
+  }
+
+  bind_cols(new_data, pred_df)
+}
+
+
+
+AIC_all <- function(mod_full, mod_noBGS, mod_noHH, mod_intercept){
+  
+  #get model AIC
+  AIC <- function(model, K){
+    2*K + 2*model$value
+  }
+  
+  model <- c("full", "noBGS", "noHH", "intercept")
+  
+  nlls <- c("mod_full" = mod_full$value,
+            "mod_noBGS" = mod_noBGS$value,
+            "mod_noHH" = mod_noHH$value,
+            "mod_intercept" = mod_intercept$value)
+  
+  
+  AICs <- c("mod_full" = AIC(mod_full, 3),
+            "mod_noBGS" = AIC(mod_noBGS, 3),
+            "mod_noHH" = AIC(mod_noHH, 2),
+            "mod_intercept" = AIC(mod_intercept, 2))
+  
+  AIC_delta <- AICs - min(AICs)
+  AIC_weight <- exp(-0.5 * AIC_delta )/sum(exp(-0.5 * AIC_delta ))
+  tibble(model, nLL = nlls, AIC = AICs, AIC_delta, AIC_weight)
+}
+
+#do all the things
+theta_all_models = function(data,sample_size, pop){
+  infer_theta(data$PI, data$G, data$fd, data$rho, sample_size = sample_size, pop = pop) }
+
+
+infer_theta <- function(pi, G_i, fd_i, rbp_i, sample_size = 100, pop = "", mode = "beta"){
+  
+  #model fit
+  mod_full <- 
+    optim(
+      par = c(2, 2, 2), #initial values of theta, alpha, and sigma
+      fn = LL_full, #log likelihood function to be optimized
+      pi_obs = pi, G_i = G_i, fd_i = fd_i, rbp_i = rbp_i, #non-optimized parameters passed to LL
+      hessian = TRUE, 
+      mode = mode
+    )
+  
+  mod_noBGS <- 
+    optim(
+      par = c(2, 2, 2), #initial values of theta, alpha, and sigma
+      fn = LL_noBGS, #log likelihood function to be optimized
+      pi_obs = pi, G_i = G_i, fd_i = fd_i, rbp_i = rbp_i, #non-optimized parameters passed to LL
+      hessian = TRUE,
+      mode = mode
+    )
+  
+  mod_noHH <- 
+    optim(
+      par = c(2,2),
+      fn = LL_noHH,
+      pi_obs = pi, G_i = G_i, fd_i = fd_i, rbp_i = rbp_i, #non-optimized parameters passed to LL
+      hessian = TRUE,
+      mode = mode
+    )
+  
+  mod_intercept <- 
+    optim(
+      par = c(2, 2),
+      fn = LL_intercept,
+      pi_obs = pi, G_i = G_i, fd_i = fd_i, rbp_i = rbp_i, #non-optimized parameters passed to LL
+      hessian = TRUE,
+      mode = mode
+    )
+  
+  
+  aic_df <- AIC_all(mod_full, mod_noBGS, mod_noHH, mod_intercept) %>% 
+    mutate(pop = pop, mode = mode)
+  
+  conf_df <- 
+    bind_rows(
+      get_conf(mod_full, c("theta", "alpha","sigma")) %>% mutate(model = "full"),
+      get_conf(mod_noBGS, c("theta", "alpha","sigma")) %>% mutate(model = "noBGS"),
+      get_conf(mod_noHH, c("theta", "sigma")) %>% mutate(model = "noHH"),
+      get_conf(mod_intercept, c("theta", "sigma")) %>% mutate(model = "intercept")
+    ) %>% 
+    mutate(pop = pop, mode = mode)
+  
+  
+  #make a data frame of the variables and randomly sample 1000 rows for input
+  new_df <- 
+    tibble(
+      pi = pi,
+      G_i = G_i,
+      fd_i = fd_i,
+      rbp_i = rbp_i 
+    ) %>% 
+    sample_n(sample_size)
+  
+  pred_df <- 
+    bind_rows(
+      predict_df(mod_full, new_data = new_df, param = c("theta","alpha","sigma"), E_theta = theta_full, mode = mode) %>% 
+        mutate(model = "full", mode = mode),
+      predict_df(mod_intercept, new_data = new_df, param = c("theta","sigma"), E_theta = theta_intercept, mode = mode) %>% 
+        mutate(model = "intercept", mode = mode),
+      predict_df(mod_noHH, new_data = new_df, param = c("theta","sigma"), E_theta = theta_noHH) %>% 
+        mutate(model = "noHH", mode = mode),
+      predict_df(mod_noBGS, new_data = new_df, param = c("theta","alpha","sigma"), E_theta = theta_noBGS, mode = mode) %>% 
+        mutate(model = "noBGS", mode = mode)
+    ) %>% 
+    mutate(pop = pop)
+  
+  theta_list <- list(pred_df = pred_df, conf_df = conf_df, aic_df = aic_df)
+  return(theta_list)
+}
+```
+
+```{r}
+
+Teo_Palmar_Theta    = theta_all_models(sample_size = 100, pop = "Teo Palmar Chico", data      = LS_Teo_Palmar_PI_REC   )
+Teo_SanLo_Theta     = theta_all_models(sample_size = 100, pop = "Teo San Lorenzo", data       = LS_Teo_SanLo_PI_REC    )
+Teo_Amatlan_Theta   = theta_all_models(sample_size = 100, pop = "Teo Amatlan de Casas", data  = LS_Teo_Amatlan_PI_REC  )
+Teo_ElRodeo_Theta   = theta_all_models(sample_size = 100, pop = "Teo El Rodeo", data          = LS_Teo_ElRodeo_PI_REC  )
+Teo_Crucero_Theta   = theta_all_models(sample_size = 100, pop = "Teo Crucero Lagunitas", data = LS_Teo_Crucero_PI_REC  )
+Teo_LosGuajes_Theta = theta_all_models(sample_size = 100, pop = "Teo Los Guajes", data        = LS_Teo_LosGuajes_PI_REC)
+options(scipen = 6)
+Teo_Palmar_Theta$aic_df   
+Teo_SanLo_Theta$aic_df    
+Teo_Amatlan_Theta$aic_df  
+Teo_ElRodeo_Theta$aic_df    
+Teo_Crucero_Theta$aic_df   
+Teo_LosGuajes_Theta$aic_df  
+
+Teo_Palmar_Theta$conf_df   
+Teo_SanLo_Theta$conf_df    
+Teo_Amatlan_Theta$conf_df  
+Teo_ElRodeo_Theta$conf_df  
+Teo_Crucero_Theta$conf_df  
+Teo_LosGuajes_Theta$conf_df
+```
+
+
+
+
+
+#```{r}
+#t=Teo_Palmar_PI_Exonic_chr1
+#new_df <- 
+#  tibble(
+#    pi =t$PI ,
+#    G_i = t$G,
+#    fd_i = t$fd,
+#    rbp_i = t$rho,
+#    rec_i = t$rec*1000 #cm/MB
+#  ) %>% 
+#  sample_n(1000)
+#  
+#pred_df <- predict_df(Teo_Palmar_Mod, new_data = new_df)
+#
+#pred_df %>% 
+#ggplot() +
+#  geom_ribbon(mapping = aes(x = rec_i, ymin = low, ymax =  high), fill = "grey50", alpha = 0.2) +
+#  geom_point(mapping = aes(rec_i, pi), alpha = 0.4) +
+#  geom_line(mapping = aes(rec_i, expected_pi), col = "black") +
+#  geom_hline(yintercept = get_conf(Teo_Palmar_Mod   )$lower[1], col = "black", lty = 2) +
+#  geom_hline(yintercept = get_conf(Teo_Palmar_Mod   )$upper[1], col = "black", lty = 2) +
+#  geom_hline(yintercept = get_conf(Teo_Palmar_Mod   )$truth[1], col = "black") +
+#  cowplot::theme_cowplot()
+#
+##sh=-.02
+#```
+
