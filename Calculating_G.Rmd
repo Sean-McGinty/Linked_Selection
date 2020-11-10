@@ -1,0 +1,455 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(data.table)
+library(tidyverse)
+library(cowplot)
+library(gridExtra)
+library(minpack.lm)
+library(rlist)
+library(Rcpp)
+library(glue)
+library(purrr)
+library(tidyr)
+options(scipen = 999)
+```
+
+Pi Window Size must be 1 kb, 100 kb, or 1 mb
+```{r}
+pi_winsize=1000000
+mu=1E-7 
+maximum_PI_BP=308000000
+```
+
+```{r}
+#deterministic model components
+theta_full <- function(theta, G_i, alpha, fd_i, rbp_i){
+  theta / (1/exp(-G_i) + alpha * fd_i / rbp_i)
+}
+
+theta_noBGS <- function(theta, G_i, alpha, fd_i, rbp_i){
+  theta / (1 + alpha * fd_i / rbp_i)
+} 
+
+theta_noHH <- function(theta, G_i, alpha, fd_i, rbp_i){
+  theta / (1/exp(-G_i))
+} 
+
+theta_intercept <- function(theta, G_i, alpha, fd_i, rbp_i){
+  theta
+}
+
+#log likelihood equations to optimize
+LL_full <- function(pi_obs, par, G_i, fd_i, rbp_i, mode = "beta"){
+  
+  #rescaled parameters to make optimization easier
+  theta <- 1/exp(par[1])
+  alpha <- 1/exp(par[2])
+  sigma <- 1/exp(par[3])
+  
+  
+  pi_pred <- theta_full(theta, G_i, alpha, fd_i, rbp_i)
+  
+  if(mode == "beta"){
+    -sum(dbeta(x = pi_obs, shape1 = pi_pred * sigma, shape2 = (1 - pi_pred) * sigma, log = TRUE))  
+  } else {
+    -sum(dnorm(x = pi_obs, mean = pi_pred, sd = sigma, log = TRUE))
+  }
+  
+}
+
+LL_noBGS <- function(pi_obs, par, G_i, fd_i, rbp_i, mode = "beta"){
+  
+  #rescaled parameters to make optimization easier
+  theta <- 1/exp(par[1])
+  alpha <- 1/exp(par[2])
+  sigma <- 1/exp(par[3])
+  
+  pi_pred <- theta_noBGS(theta, G_i, alpha, fd_i, rbp_i)
+  
+  if(mode == "beta"){
+    -sum(dbeta(x = pi_obs, shape1 = pi_pred * sigma, shape2 = (1 - pi_pred) * sigma, log = TRUE))  
+  } else {
+    -sum(dnorm(x = pi_obs, mean = pi_pred, sd = sigma, log = TRUE))
+  }
+}
+
+
+LL_noHH <- function(pi_obs, par, G_i, fd_i, rbp_i, mode = "beta"){
+  
+  #rescaled parameters to make optimization easier
+  theta <- 1/exp(par[1])
+  sigma <- 1/exp(par[2])
+  
+  pi_pred <- theta_noHH(theta, G_i, alpha, fd_i, rbp_i)
+  
+  if(mode == "beta"){
+    -sum(dbeta(x = pi_obs, shape1 = pi_pred * sigma, shape2 = (1 - pi_pred) * sigma, log = TRUE))  
+  } else {
+    -sum(dnorm(x = pi_obs, mean = pi_pred, sd = sigma, log = TRUE))
+  }
+}
+
+
+LL_intercept <- function(pi_obs, par, G_i, fd_i, rbp_i, mode = "beta"){
+  
+  #rescaled parameters to make optimization easier
+  theta <- 1/exp(par[1])
+  sigma <- 1/exp(par[2])
+  
+  pi_pred <- theta_intercept(theta, G_i, alpha, fd_i, rbp_i)
+  
+  if(mode == "beta"){
+    -sum(dbeta(x = pi_obs, shape1 = pi_pred * sigma, shape2 = (1 - pi_pred) * sigma, log = TRUE))  
+  } else {
+    -sum(dnorm(x = pi_obs, mean = pi_pred, sd = sigma, log = TRUE))
+  }
+}
+
+
+#get confidence intervals of parameters
+get_conf <- function(model, param = c("theta", "alpha", "sigma")){
+  
+  se <- sqrt(diag(solve(model$hessian)))
+  lows <- 1/exp(model$par+1.96*se)
+  highs <- 1/exp(model$par-1.96*se)
+  expected <- 1/exp(model$par)
+  conf_df <- data.frame(
+    param = param, 
+    lower=lows, 
+    value=expected, 
+    upper=highs)
+  conf_df
+}
+
+#prediction intervals based on full model with uncertainty
+predict_df <- function(model, new_data, E_theta, param = c("theta", "alpha", "sigma"), levels = c(0.025, 0.975), mode = "beta"){
+  
+  
+  conf_df <- get_conf(model, param = param)
+  theta_df <- filter(conf_df, param == "theta")
+  alpha_df <- filter(conf_df, param == "alpha")
+  sig_df <- filter(conf_df, param == "sigma")
+  sigma_low <- sig_df$lower
+  sigma_upper <- sig_df$upper
+  
+  e_exp <- E_theta(theta = theta_df$value[1], 
+                   G_i = new_data$G_i, 
+                   alpha = alpha_df$value[1], 
+                   fd_i = new_data$fd_i, 
+                   rbp_i = new_data$rbp_i)
+  
+  
+  if(mode == "beta"){
+  pred_df <- 
+    e_exp %>%
+    map_df(~{
+      tibble(
+        expected_pi = .x,
+        low = quantile(rbeta(100, shape1 = .x*sigma_low, shape2 = (1 - .x) * sigma_low), probs = levels[1]),
+        high = quantile(rbeta(100, shape1 = .x*sigma_upper, shape2 = ( 1-.x) * sigma_upper), probs = levels[2])
+      )
+    })    
+  } else {
+      pred_df <- 
+    e_exp %>%
+    map_df(~{
+      tibble(
+        expected_pi = .x,
+        low = quantile(rnorm(100, .x, sigma_low), probs = levels[1]),
+        high = quantile(rnorm(100, .x, sigma_upper), probs = levels[2])
+      )
+    })
+  }
+
+  bind_cols(new_data, pred_df)
+}
+
+
+
+AIC_all <- function(mod_full, mod_noBGS, mod_noHH, mod_intercept){
+  
+  #get model AIC
+  AIC <- function(model, K){
+    2*K + 2*model$value
+  }
+  
+  model <- c("full", "noBGS", "noHH", "intercept")
+  
+  nlls <- c("mod_full" = mod_full$value,
+            "mod_noBGS" = mod_noBGS$value,
+            "mod_noHH" = mod_noHH$value,
+            "mod_intercept" = mod_intercept$value)
+  
+  
+  AICs <- c("mod_full" = AIC(mod_full, 3),
+            "mod_noBGS" = AIC(mod_noBGS, 3),
+            "mod_noHH" = AIC(mod_noHH, 2),
+            "mod_intercept" = AIC(mod_intercept, 2))
+  
+  AIC_delta <- AICs - min(AICs) 
+  AIC_weight <- exp(-0.5 * AIC_delta )/sum(exp(-0.5 * AIC_delta ))
+  tibble(model, nLL = nlls, AIC = AICs, AIC_delta, AIC_weight)
+}
+
+#do all the things
+theta_all_models = function(data,sample_size, pop,conf = T){
+  infer_theta(data$PI, data$G, data$fd, data$rho, sample_size = sample_size, pop = pop,conf = conf) }
+
+
+infer_theta <- function(pi, G_i, fd_i, rbp_i, sample_size = 100, pop = "", mode = "beta",conf = T){
+  
+  #model fit
+  mod_full <- 
+    optim(
+      par = c(2, 2, 2), #initial values of theta, alpha, and sigma
+      fn = LL_full, #log likelihood function to be optimized
+      pi_obs = pi, G_i = G_i, fd_i = fd_i, rbp_i = rbp_i, #non-optimized parameters passed to LL
+      hessian = TRUE, 
+      mode = mode
+    )
+  
+  mod_noBGS <- 
+    optim(
+      par = c(2, 2, 2), #initial values of theta, alpha, and sigma
+      fn = LL_noBGS, #log likelihood function to be optimized
+      pi_obs = pi, G_i = G_i, fd_i = fd_i, rbp_i = rbp_i, #non-optimized parameters passed to LL
+      hessian = TRUE,
+      mode = mode
+    )
+  
+  mod_noHH <- 
+    optim(
+      par = c(2,2),
+      fn = LL_noHH,
+      pi_obs = pi, G_i = G_i, fd_i = fd_i, rbp_i = rbp_i, #non-optimized parameters passed to LL
+      hessian = TRUE,
+      mode = mode
+    )
+  
+  mod_intercept <- 
+    optim(
+      par = c(2, 2),
+      fn = LL_intercept,
+      pi_obs = pi, G_i = G_i, fd_i = fd_i, rbp_i = rbp_i, #non-optimized parameters passed to LL
+      hessian = TRUE,
+      mode = mode
+    )
+  
+  
+  aic_df <- AIC_all(mod_full, mod_noBGS, mod_noHH, mod_intercept) %>% 
+    mutate(pop = pop, mode = mode)
+  
+  
+if(conf)  {
+  conf_df <- 
+    bind_rows(
+      get_conf(mod_full, c("theta", "alpha","sigma")) %>% mutate(model = "full"),
+      get_conf(mod_noBGS, c("theta", "alpha","sigma")) %>% mutate(model = "noBGS"),
+      get_conf(mod_noHH, c("theta", "sigma")) %>% mutate(model = "noHH"),
+      get_conf(mod_intercept, c("theta", "sigma")) %>% mutate(model = "intercept")
+    ) %>% 
+    mutate(pop = pop, mode = mode)
+} else{conf_df <- tibble()}
+  
+  #make a data frame of the variables and randomly sample 1000 rows for input
+  new_df <- 
+    tibble(
+      pi = pi,
+      G_i = G_i,
+      fd_i = fd_i,
+      rbp_i = rbp_i 
+    ) %>% 
+    sample_n(sample_size)
+  
+  pred_df <- 
+    bind_rows(
+      predict_df(mod_full, new_data = new_df, param = c("theta","alpha","sigma"), E_theta = theta_full, mode = mode) %>% 
+        mutate(model = "full", mode = mode),
+      predict_df(mod_intercept, new_data = new_df, param = c("theta","sigma"), E_theta = theta_intercept, mode = mode) %>% 
+        mutate(model = "intercept", mode = mode),
+      predict_df(mod_noHH, new_data = new_df, param = c("theta","sigma"), E_theta = theta_noHH) %>% 
+        mutate(model = "noHH", mode = mode),
+      predict_df(mod_noBGS, new_data = new_df, param = c("theta","alpha","sigma"), E_theta = theta_noBGS, mode = mode) %>% 
+        mutate(model = "noBGS", mode = mode)
+    ) %>% 
+    mutate(pop = pop)
+  
+  theta_list <- list(pred_df = pred_df, conf_df = conf_df, aic_df = aic_df)
+  return(theta_list)
+}
+```
+
+Other important functions
+```{r}
+#Recombination Rate in Centimorgans
+CM = function(data,gen_map){mutate(data,
+                  cm_start = approx(x=gen_map$pos,y=gen_map$cm,xout=data$BIN_START)$y,
+                  cm_end   = approx(x=gen_map$pos,y=gen_map$cm,xout=data$BIN_END)$y,
+                  cm_mid   = (cm_start + cm_end)/2,
+                  rec      = cm_end-cm_start) %>% 
+                   
+                  na.omit()}
+#Used to get Exonic Sites per Window
+Exon_Locations=function(data){
+   s=vector()
+for(i in 1:length(data$Start)){
+   s[i]=list(seq(data$Start[i],data$End[i]))
+}
+Exonic_Site_Locations=unlist(s)
+Exonic_Site_Locations = unique(Exonic_Site_Locations)
+
+e=c(data.frame(table( cut(Exonic_Site_Locations,seq(1,maximum_PI_BP+1,pi_winsize))))$Freq,0)
+return(data.frame(BIN_START=seq(1,maximum_PI_BP+1,pi_winsize),BIN_END=seq(pi_winsize,maximum_PI_BP+pi_winsize,pi_winsize),nbr_exonic_sites=e))
+}
+
+#Calculates G
+cppFunction(
+  'NumericVector get_G(double U, double sh, double P, NumericVector fd_i, NumericVector M_1, NumericVector M_2) {
+
+  int n = M_1.size();
+  double G_k;
+  double M_i;
+  NumericVector G_i(n);
+
+  for(int i = 0; i < n; ++i) {
+    M_i =  (M_1[i] + M_2[i]) / 2;
+    for(int k = 0; k < n; ++k){
+      G_k = U * fd_i[k] * sh / (2 * (sh + P*std::abs(M_i - M_1[k]))*(sh + P*std::abs(M_i - M_2[k])));
+      G_i[i] += G_k;
+    }
+  }
+  return G_i;
+}'
+)
+
+#Reading in our PI Data
+Read_PI_Data = function(File_Path,POP_Name){
+  a = fread(File_Path) %>% na.omit() %>% mutate(BIN_START=WinCenter-pi_winsize/2 + 1,BIN_END=WinCenter+pi_winsize/2,PI = tP / nSites, BIN_MID = WinCenter, pop = POP_Name ) %>% select(Chr,pop,BIN_START,BIN_END,BIN_MID,nSites,tP,PI) %>% filter(nSites > pi_winsize*.2)
+  return(a)
+}
+
+#Components we need in order to calculate effect of Background Selection
+BGS_Components=function(data,Exonic_Sites){merge(data,Exonic_Sites,by="BIN_START") %>% 
+       rename(cm_start=cm_start.x,cm_end=cm_end.x,rec=rec.x,BIN_END=BIN_END.y) %>%
+       select(Chr,pop,PI,nbr_exonic_sites,fd,rec,BIN_START,BIN_END,cm_start,cm_end,G,s,mu,h) %>%
+       mutate(Beta_Estimate=exp(-(mu*nbr_exonic_sites)/(rec/100)),rho= (1-exp(-1*(rec/pi_winsize)*2/100))/2,cm_mid=(cm_start+cm_end)/2)  #%>% 
+      #filter(PI<.02)
+}
+
+#Model Selection from a Grid Search
+Grid_Model_Selection = function(PI_Data,pop,conf = T){
+POP_PI = Read_PI_Data(glue("~/Linked_Selection/PI_Data_All_Pops/v5--Teo--Palmar_Chico.{pi_winsize}BP_theta.thetasWindow.gz.pestPG"),"Teo_Palmar_Chico") 
+g_grid <- tidyr::expand_grid(s = 10^(-1:-6), mu = c(1e-8,1e-7), h = c(0.01, .25, 0.5)) #%>% set_names("s","mu","h")
+model_list = pmap(g_grid, function(s, mu, h){
+  LS_POP_PI <- chr %>% map_df(~{
+  #.x = "chr1"  ;s = .001; mu = 1e-7;h = .01
+  
+  
+  gen_map_chr  <- filter(gen_map_all_chr,Chr==.x)
+  if(.x == "chr2"){
+  gen_map_chr  <- gen_map_chr  %>% filter(pos<2412e5) # The final 2 points of this map have an error
+  }
+  Exons_chr  <- filter(Exons_all_chr,chrom == .x)
+  Exonic_Sites_chr = Exon_Locations(Exons_chr)   %>% CM(gen_map_chr)  %>% mutate(chr = .x) %>% mutate(fd=nbr_exonic_sites/Total_Exonic_Sites)
+  G = get_G(U = mu * Total_Exonic_Sites , sh = s * h, P = 1, fd_i = Exonic_Sites_chr$fd,  M_1 = Exonic_Sites_chr$cm_start/100,  M_2 = Exonic_Sites_chr$cm_end/100)
+  Exonic_Sites_chr = Exonic_Sites_chr %>% mutate(G = G,s = s,mu = mu,h = h)
+  PI_Data <- filter(PI_Data,Chr == .x) %>% CM(gen_map_chr)
+  BGS_Components(PI_Data,Exonic_Sites_chr)
+  
+}) 
+ #LS_POP_PI 
+mod_grid = theta_all_models(sample_size = nrow(LS_POP_PI)*.5, pop = pop, data      = LS_POP_PI,conf = conf)
+pred_df = mod_grid$pred_df %>% mutate(s = s,mu = mu,h = h)
+conf_df = mod_grid$conf_df  %>% mutate(s = s,mu = mu,h = h)
+aic_df = mod_grid$aic_df   %>% mutate(s = s,mu = mu,h = h)
+list(pred_df = pred_df ,conf_df = conf_df,aic_df = aic_df) 
+})
+model_list %>% map_df(~.x$aic_df) %>% mutate(AIC_delta = AIC - min(AIC),AIC_weight = exp(-0.5 * AIC_delta )/sum(exp(-0.5 * AIC_delta )))  %>% arrange(desc(AIC_weight))
+
+#model_list 
+
+}  
+```
+
+Get new genetic map for all chromosomes
+```{r}
+gen_map_all_chr <- fread("~/Linked_Selection/ogut_v5.map.txt")  %>% 
+  na.omit() %>%
+  mutate(cm=cm+abs(min(cm))) %>%
+  rename(Chr = chr) %>%
+  mutate(Chr = glue("chr{Chr}"))
+```
+
+Get Exon locations Across all Chromosomes
+```{r}
+Exons_all_chr = fread("~/Linked_Selection/Zm-B73-REFERENCE-NAM-5.0_Zm00001e.1.P001.BED") %>% filter(V8=="CDS") %>% select(V1,V2,V3) %>% rename("chrom"=V1,"Start"=V2,"End"=V3) %>% distinct()
+```
+
+Finding total number of exons in the genome for function diversity
+```{r}
+s=vector()
+for(i in 1:length(Exons_all_chr$Start)){
+   s[i]=list(seq(Exons_all_chr$Start[i],Exons_all_chr$End[i]))
+}
+All_Exonic_Locations=unlist(s)
+Total_Exonic_Sites=length(unique(All_Exonic_Locations))
+```
+
+Reading in Our PI data based on window size
+```{r}
+LR_Amatlan_PI  = Read_PI_Data(glue("~/Linked_Selection/PI_Data_All_Pops/v5--LR--Amatlan_de_Canas.{pi_winsize}BP_theta.thetasWindow.gz.pestPG") ,"LR_Amatlan_de_Canas") 
+Teo_Amatlan_PI = Read_PI_Data(glue("~/Linked_Selection/PI_Data_All_Pops/v5--Teo--Amatlan_de_Canas.{pi_winsize}BP_theta.thetasWindow.gz.pestPG"),"Teo_Amatlan_de_Canas")
+
+LR_Crucero_PI  = Read_PI_Data(glue("~/Linked_Selection/PI_Data_All_Pops/v5--LR--Crucero_Lagunitas.{pi_winsize}BP_theta.thetasWindow.gz.pestPG") ,"LR_Crucero_Lagunitas")
+Teo_Crucero_PI = Read_PI_Data(glue("~/Linked_Selection/PI_Data_All_Pops/v5--Teo--Crucero_Lagunitas.{pi_winsize}BP_theta.thetasWindow.gz.pestPG"),"Teo_Crucero_Lagunitas")
+
+LR_LosGuajes_PI  = Read_PI_Data(glue("~/Linked_Selection/PI_Data_All_Pops/v5--LR--Los_Guajes.{pi_winsize}BP_theta.thetasWindow.gz.pestPG" ),"LR_Los_Guajes")
+Teo_LosGuajes_PI = Read_PI_Data(glue("~/Linked_Selection/PI_Data_All_Pops/v5--Teo--Los_Guajes.{pi_winsize}BP_theta.thetasWindow.gz.pestPG"),"Teo_Los_Guajes")
+
+LR_Palmar_PI  = Read_PI_Data(glue("~/Linked_Selection/PI_Data_All_Pops/v5--LR--Palmar_Chico.{pi_winsize}BP_theta.thetasWindow.gz.pestPG" ),"LR_Palmar_Chico")
+Teo_Palmar_PI = Read_PI_Data(glue("~/Linked_Selection/PI_Data_All_Pops/v5--Teo--Palmar_Chico.{pi_winsize}BP_theta.thetasWindow.gz.pestPG"),"Teo_Palmar_Chico")
+
+LR_Sanlo_PI  = Read_PI_Data(glue("~/Linked_Selection/PI_Data_All_Pops/v5--LR--San_Lorenzo.{pi_winsize}BP_theta.thetasWindow.gz.pestPG" ),"LR_San_Lorenzo")
+Teo_SanLo_PI = Read_PI_Data(glue("~/Linked_Selection/PI_Data_All_Pops/v5--Teo--San_Lorenzo.{pi_winsize}BP_theta.thetasWindow.gz.pestPG"),"Teo_San_Lorenzo")
+
+Teo_ElRodeo_PI = Read_PI_Data(glue("~/Linked_Selection/PI_Data_All_Pops/v5--Teo--El_Rodeo.{pi_winsize}BP_theta.thetasWindow.gz.pestPG"),"Teo_El_Rodeo")
+```
+
+
+```{r}
+LR_Amatlan_Mod      = Grid_Model_Selection(LR_Amatlan_PI, "LR_Amatlan" )
+Teo_Amatlan_Mod     = Grid_Model_Selection(Teo_Amatlan_PI,"Teo_Amatlan")
+LR_Crucero_Mod      = Grid_Model_Selection(LR_Crucero_PI,"LR_Crucero",conf = F ) # Error in solve.default(model$hessian) : system is computationally singular: reciprocal condition number = 3.8956e-21 
+Teo_Crucero_Mod     = Grid_Model_Selection(Teo_Crucero_PI,"Teo_Crucero")
+LR_Los_Guajes_Mod   = Grid_Model_Selection(LR_LosGuajes_PI,"LR_Los_Guajes" )
+Teo_Los_Guajes_Mod  = Grid_Model_Selection(Teo_LosGuajes_PI,"Teo_Los_Guajes")
+LR_Palmar_Mod       = Grid_Model_Selection(LR_Palmar_PI, "LR_Palmar" )
+Teo_Palmar_Mod      = Grid_Model_Selection(Teo_Palmar_PI,"Teo_Palmar") 
+LR_San_Lorenzo_Mod  = Grid_Model_Selection(LR_Sanlo_PI,"LR_San_Lorenzo" )
+Teo_San_Lorenzo_Mod = Grid_Model_Selection(Teo_SanLo_PI,"Teo_San_Lorenzo")
+Teo_El_Rodeo_Mod    = Grid_Model_Selection(Teo_ElRodeo_PI,"Teo_El_Rodeo")
+
+```
+
+```{r}
+LR_Amatlan_Mod      
+Teo_Amatlan_Mod     
+#LR_Crucero_Mod      
+Teo_Crucero_Mod     
+LR_Los_Guajes_Mod   
+Teo_Los_Guajes_Mod  
+LR_Palmar_Mod       
+Teo_Palmar_Mod      
+LR_San_Lorenzo_Mod  
+Teo_San_Lorenzo_Mod 
+Teo_El_Rodeo_Mod    
+```
+
+```{r}
+ggplot(data = filter(Teo_Palmar_Mod,model == "noHH") ,aes(x = s, y = h,col = nLL)) + geom_point()
+```
+
